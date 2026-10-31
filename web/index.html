@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VideoEncoder</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23ff8a1f'/><path d='M12 9l11 7-11 7z' fill='%23111'/></svg>">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="brand-mark">▶</span> Video<b>Encoder</b></div>
+  <nav>
+    <button data-page="encode" class="on">Encodare</button>
+    <button data-page="queue">Coadă <span class="count" id="qcount">0</span></button>
+    <button data-page="presets">Presetări</button>
+    <button data-page="settings">Setări</button>
+  </nav>
+  <div class="hdr-right">
+    <span class="badge hide-sm" id="ffbadge">FFmpeg…</span>
+    <span class="badge" id="modebadge">…</span>
+    <button class="btn sm" id="logoutBtn" style="display:none">Ieșire</button>
+  </div>
+</header>
+
+<main>
+<!-- ================= ENCODARE ================= -->
+<section class="page on" id="page-encode">
+ <div class="grid">
+  <div>
+   <div class="card">
+    <h3>Fișiere sursă <span class="sp"><button class="btn sm" id="clearSrc">Golește</button></span></h3>
+    <div class="body">
+      <div class="rowflex" style="margin-bottom:10px">
+        <button class="btn" id="browseBtn">📁 Răsfoiește…</button>
+        <button class="btn" id="uploadBtn">⬆ Încarcă…</button>
+        <input type="file" id="fileInput" multiple hidden>
+      </div>
+      <div class="rowflex">
+        <input id="manualPath" placeholder="Cale fișier sau URL (http, rtmp, udp…)">
+        <button class="btn" id="addManual">Adaugă</button>
+      </div>
+      <div class="drop" id="drop" style="margin-top:10px">Trage fișierele aici pentru a le încărca pe server</div>
+      <div class="upbar" id="upbar"><i></i></div>
+      <ul class="srclist" id="srclist"></ul>
+    </div>
+   </div>
+   <div class="card">
+    <h3>Informații fișier</h3>
+    <div class="body probe" id="probe"><span class="dim">Selectează un fișier din listă.</span></div>
+   </div>
+  </div>
+
+  <div>
+   <div class="card">
+    <h3>Presetare
+      <span class="sp">
+        <button class="btn sm" id="savePresetBtn">💾 Salvează ca presetare</button>
+        <button class="btn sm" id="resetBtn">Resetează</button>
+      </span>
+    </h3>
+    <div class="body">
+      <select id="presetSel"></select>
+    </div>
+   </div>
+
+   <div class="card">
+    <h3>Video</h3>
+    <div class="body fields">
+      <label>Container / format
+        <select data-o="container">
+          <optgroup label="Video">
+            <option value="mp4">MP4</option><option value="mkv">MKV</option><option value="mov">MOV</option>
+            <option value="ts">MPEG-TS (.ts)</option><option value="webm">WebM</option><option value="hls">HLS (m3u8 + segmente)</option>
+            <option value="gif">GIF animat</option>
+          </optgroup>
+          <optgroup label="Doar audio">
+            <option value="mp3">MP3</option><option value="aac">AAC</option><option value="m4a">M4A</option>
+            <option value="flac">FLAC</option><option value="wav">WAV</option><option value="opus">Opus</option>
+          </optgroup>
+        </select>
+      </label>
+      <label>Codec video
+        <select data-o="vcodec" id="vcodecSel">
+          <option value="copy">Copiere (fără re-encodare)</option>
+          <option value="none">Fără video</option>
+          <optgroup label="Procesor (CPU)">
+            <option value="libx264">H.264 (x264)</option>
+            <option value="libx265">H.265 / HEVC (x265)</option>
+            <option value="libsvtav1">AV1 (SVT-AV1)</option>
+            <option value="libvpx-vp9">VP9</option>
+            <option value="prores_ks">ProRes 422 HQ</option>
+            <option value="mpeg2video">MPEG-2</option>
+          </optgroup>
+          <optgroup label="NVIDIA (NVENC)">
+            <option value="h264_nvenc">H.264 NVENC</option><option value="hevc_nvenc">HEVC NVENC</option><option value="av1_nvenc">AV1 NVENC</option>
+          </optgroup>
+          <optgroup label="Intel (QuickSync)">
+            <option value="h264_qsv">H.264 QSV</option><option value="hevc_qsv">HEVC QSV</option><option value="av1_qsv">AV1 QSV</option>
+          </optgroup>
+          <optgroup label="AMD (AMF)">
+            <option value="h264_amf">H.264 AMF</option><option value="hevc_amf">HEVC AMF</option><option value="av1_amf">AV1 AMF</option>
+          </optgroup>
+        </select>
+      </label>
+      <label>Control rată
+        <select data-o="rate_mode"><option value="quality">Calitate constantă</option><option value="bitrate">Bitrate țintă</option></select>
+      </label>
+      <label class="vq"><span id="qLabel">Calitate (CRF)</span>
+        <div class="rowflex"><input type="range" min="0" max="51" data-o="quality" data-num id="qRange"><b class="mono" id="qVal">23</b></div>
+        <span class="hint" id="qHint">mai mic = calitate mai bună</span>
+      </label>
+      <label class="vb">Bitrate video<input data-o="vbitrate" placeholder="ex: 4000k"></label>
+      <label class="vb">Bitrate maxim<input data-o="maxrate" placeholder="ex: 6000k (opțional)"></label>
+      <label>Viteză ↔ calitate
+        <div class="rowflex"><input type="range" min="1" max="7" data-o="speed" data-num id="spRange"><b class="mono" id="spVal">5</b></div>
+        <span class="hint" id="spHint"></span>
+      </label>
+      <label>Rezoluție
+        <select data-o="resolution">
+          <option value="keep">Originală</option><option value="2160">2160p (4K)</option><option value="1440">1440p</option>
+          <option value="1080">1080p</option><option value="720">720p</option><option value="576">576p (SD)</option>
+          <option value="480">480p</option><option value="360">360p</option><option value="custom">Personalizată…</option>
+        </select>
+      </label>
+      <label class="custres">Lățime<input type="number" data-o="width" data-num placeholder="auto"></label>
+      <label class="custres">Înălțime<input type="number" data-o="height" data-num placeholder="auto"></label>
+      <label>Cadre / sec
+        <select data-o="fps"><option value="keep">Originale</option><option>23.976</option><option>24</option><option>25</option>
+          <option>29.97</option><option>30</option><option>50</option><option>59.94</option><option>60</option><option>12</option><option>15</option></select>
+      </label>
+      <label>Format pixel
+        <select data-o="pix_fmt"><option value="">Automat</option><option value="yuv420p">yuv420p (compatibil)</option>
+          <option value="yuv420p10le">yuv420p10le (10-bit)</option><option value="p010le">p010le (10-bit HW)</option><option value="yuv422p10le">yuv422p10le</option></select>
+      </label>
+      <label>GOP (keyframe la N cadre)<input type="number" data-o="gop" data-num placeholder="auto"></label>
+      <label>Tune (x264/x265)
+        <select data-o="tune"><option value="">—</option><option>film</option><option>animation</option><option>grain</option><option>fastdecode</option><option>zerolatency</option></select>
+      </label>
+      <label class="chk"><input type="checkbox" data-o="deinterlace"> Deîntrețesere (bwdif)</label>
+      <label class="chk"><input type="checkbox" data-o="hw_decode"> Decodare hardware</label>
+    </div>
+   </div>
+
+   <div class="card">
+    <h3>Audio</h3>
+    <div class="body fields">
+      <label>Codec audio
+        <select data-o="acodec">
+          <option value="copy">Copiere</option><option value="none">Fără audio</option>
+          <option value="aac">AAC</option><option value="libmp3lame">MP3</option><option value="ac3">AC3 (Dolby)</option>
+          <option value="eac3">E-AC3</option><option value="libopus">Opus</option><option value="flac">FLAC</option>
+          <option value="pcm_s16le">PCM 16-bit</option><option value="mp2">MP2</option>
+        </select>
+      </label>
+      <label>Bitrate audio
+        <select data-o="abitrate"><option>64k</option><option>96k</option><option>128k</option><option>160k</option><option>192k</option>
+          <option>256k</option><option>320k</option><option>384k</option><option>448k</option></select>
+      </label>
+      <label>Canale
+        <select data-o="achannels"><option value="">Originale</option><option value="1">Mono</option><option value="2">Stereo</option><option value="6">5.1</option></select>
+      </label>
+      <label>Frecvență
+        <select data-o="asamplerate"><option value="">Originală</option><option>44100</option><option>48000</option><option>96000</option></select>
+      </label>
+      <label>Volum (dB)<input type="number" step="0.5" data-o="volume" placeholder="0"></label>
+      <label>Normalizare loudness
+        <select data-o="loudnorm"><option value="">Nu</option><option value="-23">EBU R128 (−23 LUFS, TV)</option>
+          <option value="-16">−16 LUFS (web/podcast)</option><option value="-14">−14 LUFS (YouTube/Spotify)</option></select>
+      </label>
+    </div>
+   </div>
+
+   <div class="card">
+    <h3>Tăiere, subtitrări, ieșire</h3>
+    <div class="body fields">
+      <label>Început<input data-o="start" placeholder="00:00:00"></label>
+      <label>Sfârșit<input data-o="end" placeholder="00:00:00 (gol = până la final)"></label>
+      <label>Subtitrări
+        <select data-o="subs"><option value="auto">Automat</option><option value="copy">Păstrează</option>
+          <option value="none">Elimină</option><option value="burn">Arde în imagine (prima pistă)</option></select>
+      </label>
+      <label>Segment HLS (sec)<input type="number" data-o="hls_time" data-num></label>
+      <label class="chk"><input type="checkbox" data-o="map_all"> Toate pistele (audio/sub)</label>
+      <label class="chk"><input type="checkbox" data-o="faststart"> Fast start (web)</label>
+      <label class="full">Folder ieșire
+        <div class="rowflex"><input data-o="out_dir" id="outDir" placeholder="implicit (din Setări)"><button class="btn" id="pickOut">📁</button></div>
+      </label>
+      <label class="chk"><input type="checkbox" data-o="same_dir"> Lângă fișierul sursă</label>
+      <label>Sufix nume<input data-o="suffix" placeholder="ex: _720p"></label>
+      <label class="chk"><input type="checkbox" data-o="overwrite"> Suprascrie dacă există</label>
+    </div>
+   </div>
+
+   <div class="card">
+    <h3>Avansat</h3>
+    <div class="body fields">
+      <label class="span2">Filtre video suplimentare (-vf)<input data-o="vfilter" placeholder="ex: crop=1920:800,eq=contrast=1.1"></label>
+      <label class="span2">Filtre audio suplimentare (-af)<input data-o="afilter" placeholder="ex: highpass=f=80"></label>
+      <label class="span2">Argumente intrare (înainte de -i)<input data-o="in_args" placeholder="ex: -re  sau  -analyzeduration 10M"></label>
+      <label class="span2">Argumente ieșire suplimentare<input data-o="extra_args" placeholder='ex: -tag:v hvc1 -metadata title="Film"'></label>
+    </div>
+   </div>
+
+   <div class="card sticky-bottom">
+    <h3>Comandă FFmpeg</h3>
+    <div class="body">
+      <div class="cmdbox" id="cmdPreview">…</div>
+      <div class="actionbar">
+        <button class="btn sm" id="copyCmd">Copiază</button>
+        <span class="grow dim" id="srcCountLbl"></span>
+        <button class="btn primary" id="enqueueBtn">＋ Adaugă în coadă</button>
+      </div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- ================= COADĂ ================= -->
+<section class="page" id="page-queue">
+  <div class="qtools">
+    <button class="btn" id="qPauseBtn">⏸ Oprește pornirea joburilor</button>
+    <span class="grow muted" id="qSummary"></span>
+    <button class="btn" id="qClearBtn">Șterge terminatele</button>
+  </div>
+  <div id="joblist"></div>
+</section>
+
+<!-- ================= PRESETĂRI ================= -->
+<section class="page" id="page-presets">
+  <div class="card"><h3>Presetările mele</h3><div class="body"><div class="plist" id="userPresets"></div></div></div>
+  <div class="card"><h3>Presetări incluse</h3><div class="body"><div class="plist" id="builtinPresets"></div></div></div>
+</section>
+
+<!-- ================= SETĂRI ================= -->
+<section class="page" id="page-settings">
+ <div class="grid">
+  <div>
+   <div class="card"><h3>Sistem</h3><div class="body"><div class="kv" id="sysinfo"></div>
+     <div class="actionbar"><button class="btn" id="testHwBtn">Retestează encoderele HW</button>
+       <button class="btn" id="dlFFBtn">⬇ Descarcă / actualizează FFmpeg</button></div>
+     <div class="hint" id="dlStatus" style="margin-top:8px"></div>
+   </div></div>
+   <div class="card"><h3>Acces extern</h3><div class="body" id="accessInfo"></div></div>
+  </div>
+  <div>
+   <div class="card"><h3>Setări</h3>
+    <div class="body fields" id="settingsForm">
+      <label>Port HTTP<input type="number" name="port"></label>
+      <label>Interfață (bind)<select name="bind"><option value="0.0.0.0">Toate (local + extern)</option><option value="127.0.0.1">Doar local</option></select></label>
+      <label>Joburi simultane<input type="number" name="max_jobs" min="1" max="16"></label>
+      <label class="full">Folder ieșire implicit<div class="rowflex"><input name="output_dir"><button class="btn" id="pickOut2">📁</button></div></label>
+      <label class="full">Cale ffmpeg.exe (gol = automat)<input name="ffmpeg_path"></label>
+      <label class="full">Cale ffprobe.exe (gol = automat)<input name="ffprobe_path"></label>
+      <label class="chk full"><input type="checkbox" name="low_priority"> Rulează FFmpeg cu prioritate scăzută</label>
+      <label class="chk full"><input type="checkbox" name="open_window"> Deschide fereastra la pornire</label>
+      <label class="chk full"><input type="checkbox" name="local_no_auth"> Fără parolă pe acest calculator (127.0.0.1)</label>
+      <label>Utilizator acces extern<input name="username" autocomplete="off"></label>
+      <label>Parolă nouă<input type="password" name="new_password" autocomplete="new-password" placeholder="neschimbată"></label>
+      <div class="full actionbar"><span class="grow err" id="setErr"></span>
+        <button class="btn danger" id="shutdownBtn">⏻ Oprește aplicația</button>
+        <button class="btn primary" id="saveSettings">Salvează</button></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+</main>
+
+<!-- ================= MODALE ================= -->
+<div class="modal" id="fbModal"><div class="win">
+  <h3><span id="fbTitle">Alege fișiere</span><button class="x" data-close>×</button></h3>
+  <div class="content">
+    <div class="fb-short" id="fbShort"></div>
+    <div class="fb-path"><button class="btn icon" id="fbUp">⬆</button><input id="fbPath"><button class="btn" id="fbGo">Mergi</button></div>
+    <div class="fb-list" id="fbList"></div>
+  </div>
+  <div class="foot">
+    <label class="chk"><input type="checkbox" id="fbAll"> Toate fișierele</label>
+    <span class="grow dim" id="fbSel"></span>
+    <button class="btn" id="fbSelAll">Selectează tot</button>
+    <button class="btn" data-close>Anulează</button>
+    <button class="btn primary" id="fbOk">Adaugă</button>
+  </div>
+</div></div>
+
+<div class="modal" id="logModal"><div class="win">
+  <h3><span id="logTitle">Jurnal</span><button class="x" data-close>×</button></h3>
+  <div class="content"><div class="cmdbox" id="logCmd" style="max-height:none;margin-bottom:10px"></div><div class="logbox" id="logBody"></div></div>
+  <div class="foot"><label class="chk"><input type="checkbox" id="logFollow" checked> Urmărește</label><span class="grow"></span><button class="btn" data-close>Închide</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+name: build
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22' }
+      - run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o VideoEncoder.exe .
+      - run: zip VideoEncoder-windows-x64.zip VideoEncoder.exe *.bat README.md
+      - uses: actions/upload-artifact@v4
+        with: { name: VideoEncoder-windows-x64, path: VideoEncoder-windows-x64.zip }
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with: { files: VideoEncoder-windows-x64.zip }

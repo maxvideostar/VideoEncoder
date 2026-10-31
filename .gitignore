@@ -1,0 +1,9 @@
+config.json
+jobs.json
+jobs.json.tmp
+presets.json
+videoencoder.log
+output/
+uploads/
+ffmpeg/
+*.syso

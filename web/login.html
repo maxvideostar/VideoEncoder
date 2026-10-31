@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VideoEncoder – Autentificare</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="login-body">
+<form class="login-card" id="f">
+  <div class="brand big"><span class="brand-mark">▶</span> Video<b>Encoder</b></div>
+  <p class="muted">Acces extern – introdu datele de autentificare</p>
+  <label>Utilizator<input id="u" autocomplete="username" required autofocus></label>
+  <label>Parolă<input id="p" type="password" autocomplete="current-password" required></label>
+  <div id="err" class="err"></div>
+  <button class="btn primary wide" type="submit">Intră</button>
+</form>
+<script>
+document.getElementById('f').onsubmit = async e => {
+  e.preventDefault();
+  const err = document.getElementById('err'); err.textContent = '';
+  const r = await fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({username: u.value, password: p.value})});
+  if (r.ok) location.href = '/';
+  else { const j = await r.json().catch(()=>({})); err.textContent = j.error || 'Eroare'; }
+};
+</script>
+</body>
+</html>
