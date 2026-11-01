@@ -23,6 +23,7 @@ Un singur fișier `VideoEncoder.exe`, fără instalare, fără dependențe.
 - Analiză fișier cu ffprobe (codec, rezoluție, fps, întrețesut, piste audio/sub)
 - **Descărcare automată FFmpeg** (build BtbN GPL) dacă nu e instalat
 - Prioritate scăzută pentru FFmpeg (opțional), pornire automată la logare
+- **Serviciu Windows** – pornește cu Windows înainte de logare, fără consolă, repornire automată la crash
 
 ## Instalare
 
@@ -39,6 +40,29 @@ Un singur fișier `VideoEncoder.exe`, fără instalare, fără dependențe.
 - Rulează `firewall-allow.bat` ca Administrator ca să deschizi portul în Windows Firewall (sau acceptă promptul Windows la prima pornire).
 - Recomandat pentru internet: pune-l în spatele unui reverse proxy cu HTTPS (nginx). Cererile venite prin proxy (`X-Forwarded-For`) sunt tratate mereu ca externe și cer parolă.
 
+## Serviciu Windows
+
+Trei variante (toate cer drepturi de administrator – apare promptul UAC):
+
+1. **Din interfață**: Setări → *Serviciu Windows* → **Instalează ca serviciu**. Aplicația curentă se închide, iar serviciul preia același port; pagina se reîncarcă singură.
+2. **`service-install.bat`** (dublu-click) / **`service-uninstall.bat`**
+3. **Linie de comandă** (cmd ca Administrator):
+
+```
+VideoEncoder.exe -install      instalează + pornește (pornire automată cu Windows)
+VideoEncoder.exe -stop         oprește serviciul
+VideoEncoder.exe -start        pornește serviciul
+VideoEncoder.exe -uninstall    oprește + dezinstalează
+VideoEncoder.exe -install -svc-user .\Cristian -svc-pass PAROLA   rulează sub contul tău
+```
+
+Note:
+- Serviciul se numește `VideoEncoder` (vizibil în `services.msc`), pornire *Automatic*, repornește singur după 5s / 10s / 30s dacă se oprește neașteptat.
+- Rulează implicit ca **LocalSystem**: unitățile de rețea mapate (ex. `Z:`) nu sunt vizibile – folosește căi UNC `\\server\share`, sau instalează-l sub contul tău (`-svc-user`).
+- Interfața se deschide pornind `VideoEncoder.exe` normal (detectează că serviciul rulează și deschide doar fereastra) sau din browser la `http://127.0.0.1:8090/`.
+- Configurația, coada și presetările sunt aceleași (fișierele de lângă exe), deci nu pierzi nimic la trecerea în serviciu.
+- Nu muta exe-ul după instalare; dacă îl muți, dezinstalează și reinstalează serviciul.
+
 ## Parametri linie de comandă
 
 ```
@@ -50,8 +74,10 @@ VideoEncoder.exe [-port 8090] [-nogui] [-data D:\VideoEncoderData]
 | `-port` | portul HTTP (suprascrie config.json) |
 | `-nogui` | nu deschide fereastra (rulare în fundal / server) |
 | `-data` | folderul pentru config, joburi, presetări, upload-uri |
+| `-install` / `-uninstall` / `-start` / `-stop` | gestionare serviciu Windows |
+| `-svc-user` / `-svc-pass` | cont pentru serviciu (implicit LocalSystem) |
 
-`autostart-install.bat` / `autostart-remove.bat` – pornire automată la logare (cu `-nogui`).
+`autostart-install.bat` / `autostart-remove.bat` – pornire automată la logare (cu `-nogui`), alternativă mai simplă la serviciu.
 
 ## Fișiere create (lângă exe)
 
@@ -84,5 +110,6 @@ builder.go       construirea comenzii FFmpeg din opțiuni
 jobs.go          coada, rularea FFmpeg, parsare progres
 handlers.go      API: sistem, setări, fișiere, upload, probe, presetări, descărcare FFmpeg
 proc_windows.go  ascundere consolă, prioritate, pauză (NtSuspendProcess), fereastră Edge --app
+service_*.go     serviciu Windows nativ (advapi32): instalare, pornire, oprire, handover
 web/             interfața (HTML/CSS/JS, inclusă în exe)
 ```

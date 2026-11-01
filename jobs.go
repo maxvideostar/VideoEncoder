@@ -490,3 +490,19 @@ func (m *JobManager) saveSoon() {
 		}
 	})
 }
+
+// KillAll oprește toate procesele ffmpeg (la oprirea serviciului / aplicației)
+func (m *JobManager) KillAll() {
+	m.mu.Lock()
+	m.paused = true
+	for _, j := range m.jobs {
+		if (j.Status == "running" || j.Status == "paused") && j.cmd != nil && j.cmd.Process != nil {
+			if j.Status == "paused" {
+				resumeProcess(j.cmd.Process)
+			}
+			j.cmd.Process.Kill()
+		}
+	}
+	m.mu.Unlock()
+	time.Sleep(500 * time.Millisecond)
+}

@@ -20,7 +20,7 @@ import (
 )
 
 const AppName = "VideoEncoder"
-const AppVersion = "1.0.0"
+const AppVersion = "1.1.0"
 
 //go:embed web
 var webFS embed.FS
@@ -97,15 +97,29 @@ func main() {
 	dataDir := flag.String("data", "", "director date (implicit: lângă exe)")
 	noGUI := flag.Bool("nogui", false, "nu deschide fereastra locală")
 	port := flag.Int("port", 0, "port HTTP (suprascrie config)")
+	fInstall := flag.Bool("install", false, "instalează și pornește serviciul Windows (necesită administrator)")
+	fUninstall := flag.Bool("uninstall", false, "oprește și dezinstalează serviciul Windows")
+	fStart := flag.Bool("start", false, "pornește serviciul Windows")
+	fStop := flag.Bool("stop", false, "oprește serviciul Windows")
+	fService := flag.Bool("service", false, "(intern) rulare ca serviciu Windows")
+	svcUser := flag.String("svc-user", "", "cont pentru serviciu (implicit LocalSystem), ex: .\\Cristian")
+	svcPass := flag.String("svc-pass", "", "parola contului pentru serviciu")
 	flag.Parse()
 	if *dataDir != "" {
 		baseDir = *dataDir
 	}
 	os.MkdirAll(baseDir, 0755)
 
+	if *fInstall || *fUninstall || *fStart || *fStop {
+		os.Exit(serviceCLI(*fInstall, *fUninstall, *fStart, *fStop, *svcUser, *svcPass))
+	}
+	if *fService {
+		*noGUI = true
+	}
+
 	lf, err := os.OpenFile(filepath.Join(baseDir, "videoencoder.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err == nil {
-		log.SetOutput(io.MultiWriter(os.Stdout, lf))
+		log.SetOutput(io.MultiWriter(lf, os.Stdout))
 	}
 	log.Printf("%s %s pornește (director: %s)", AppName, AppVersion, baseDir)
 
@@ -120,9 +134,45 @@ func main() {
 	localURL := fmt.Sprintf("http://127.0.0.1:%d/", c.Port)
 	addr := net.JoinHostPort(c.Bind, strconv.Itoa(c.Port))
 
+	if *fService {
+		// rulăm ca serviciu: serverul în fundal, dispatcher-ul SCM blochează
+		srvCh := make(chan *http.Server, 1)
+		go func() {
+			var ln net.Listener
+			for i := 0; ; i++ {
+				l, err := net.Listen("tcp", addr)
+				if err == nil {
+					ln = l
+					break
+				}
+				if i%15 == 0 {
+					log.Printf("serviciu: aștept portul %s (%v)", addr, err)
+				}
+				time.Sleep(2 * time.Second)
+			}
+			srvCh <- startServer(ln, c, localURL, false)
+		}()
+		err := runService(func() {
+			if jobs != nil {
+				jobs.KillAll()
+			}
+			select {
+			case srv := <-srvCh:
+				srv.Close()
+			default:
+			}
+		})
+		if err != nil {
+			log.Printf("nu pot rula ca serviciu: %v", err)
+			os.Exit(1)
+		}
+		log.Printf("serviciu oprit")
+		os.Exit(0)
+	}
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		// probabil rulează deja – deschidem doar fereastra
+		// probabil rulează deja (aplicație sau serviciu) – deschidem doar fereastra
 		log.Printf("nu pot asculta pe %s: %v", addr, err)
 		if !*noGUI {
 			openWindow(localURL)
@@ -130,6 +180,12 @@ func main() {
 		time.Sleep(2 * time.Second)
 		os.Exit(1)
 	}
+	srv := startServer(ln, c, localURL, c.OpenWindow && !*noGUI)
+	_ = srv
+	select {}
+}
+
+func startServer(ln net.Listener, c Config, localURL string, open bool) *http.Server {
 
 	jobs = NewJobManager()
 	go detectEncoders()
@@ -145,12 +201,46 @@ func main() {
 	if c.DefaultPass {
 		log.Printf("ATENȚIE: parola implicită este 'admin' – schimb-o din Setări!")
 	}
-	if c.OpenWindow && !*noGUI {
+	if open {
 		go func() { time.Sleep(400 * time.Millisecond); openWindow(localURL) }()
 	}
-	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+	go func() {
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+	return srv
+}
+
+// serviceCLI – acțiuni din linia de comandă / .bat
+func serviceCLI(install, uninstall, start, stop bool, user, pass string) int {
+	var err error
+	switch {
+	case install:
+		if err = serviceInstall(user, pass); err == nil {
+			err = serviceStart()
+			if err == nil {
+				log.Printf("Serviciul %s a fost instalat și pornit (pornire automată cu Windows).", ServiceName)
+			}
+		}
+	case uninstall:
+		if err = serviceUninstall(); err == nil {
+			log.Printf("Serviciul %s a fost dezinstalat.", ServiceName)
+		}
+	case start:
+		if err = serviceStart(); err == nil {
+			log.Printf("Serviciul %s a pornit.", ServiceName)
+		}
+	case stop:
+		if err = serviceStop(); err == nil {
+			log.Printf("Serviciul %s a fost oprit.", ServiceName)
+		}
 	}
+	if err != nil {
+		log.Printf("EROARE: %v", err)
+		return 1
+	}
+	return 0
 }
 
 func securityHeaders(h http.Handler) http.Handler {
@@ -179,6 +269,8 @@ func registerRoutes(mux *http.ServeMux) {
 	api("GET /api/system", handleSystem)
 	api("POST /api/system/test-hw", handleTestHW)
 	api("POST /api/system/shutdown", handleShutdown)
+	api("GET /api/service", handleServiceStatus)
+	api("POST /api/service/{action}", handleServiceAction)
 	api("GET /api/settings", handleGetSettings)
 	api("POST /api/settings", handleSaveSettings)
 

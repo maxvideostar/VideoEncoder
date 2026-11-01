@@ -392,7 +392,7 @@ async function loadSystem() {
   if (sys.ffmpeg_version) { fb.className = 'badge ok hide-sm'; fb.textContent = 'FFmpeg OK'; fb.title = sys.ffmpeg_version; }
   else { fb.className = 'badge err hide-sm'; fb.textContent = 'FFmpeg lipsă'; fb.title = 'Mergi la Setări → Descarcă FFmpeg'; }
   const mb = $('#modebadge');
-  mb.textContent = sys.local ? 'Local' : 'Extern · ' + sys.user;
+  mb.textContent = (sys.local ? 'Local' : 'Extern · ' + sys.user) + (sys.is_service ? ' · serviciu' : '');
   mb.className = 'badge ' + (sys.local ? '' : 'warn');
   $('#logoutBtn').style.display = sys.local && sys.user === 'local' ? 'none' : '';
 
@@ -449,11 +449,62 @@ async function pollDL() {
   } catch {}
 }
 
+// ====================== serviciu Windows ======================
+const SVC_RO = { absent:'neinstalat', stopped:'oprit', starting:'pornește', stopping:'se oprește', running:'rulează', unknown:'necunoscut' };
+const SVC_CLS = { running:'done', stopped:'canceled', absent:'queued', starting:'running', stopping:'paused' };
+async function loadService() {
+  let s; try { s = await api('/api/service'); } catch { return; }
+  const card = $('#svcCard');
+  if (!s.supported) { card.style.display = 'none'; return; }
+  const pill = $('#svcPill'); pill.textContent = SVC_RO[s.state] || s.state; pill.className = 'st-pill ' + (SVC_CLS[s.state] || '');
+  const info = s.is_service
+    ? 'Aplicația <b>rulează acum ca serviciu</b>: pornește automat cu Windows, înainte de logare, și nu se închide la delogare.'
+    : s.state === 'absent'
+      ? 'Instalează VideoEncoder ca serviciu ca să pornească automat cu Windows, înainte de logare, fără fereastră de consolă. Fereastra curentă se va închide, iar serviciul preia același port.'
+      : 'Serviciul este instalat, dar acum rulează aplicația normală.';
+  $('#svcInfo').innerHTML = info + '<br><span class="dim">Ca serviciu rulează sub contul LocalSystem: unitățile de rețea mapate (Z:) nu sunt vizibile — folosește căi \\\\server\\share. Interfața o deschizi pornind VideoEncoder.exe sau din browser.</span>';
+  const b = [];
+  if (!sys.local) { $('#svcBtns').innerHTML = '<span class="dim">Serviciul se gestionează doar de pe acest calculator.</span>'; return; }
+  if (s.state === 'absent') b.push(['install', '⚙ Instalează ca serviciu', 'primary']);
+  if (s.state === 'stopped' && !s.is_service) b.push(['start', '▶ Pornește serviciul', 'primary']);
+  if (s.state === 'running' && s.is_service) b.push(['stop', '■ Oprește serviciul', '']);
+  if (s.state !== 'absent') b.push(['uninstall', '🗑 Dezinstalează serviciul', 'danger']);
+  $('#svcBtns').innerHTML = b.map(x => `<button class="btn ${x[2]}" data-svc="${x[0]}">${x[1]}</button>`).join('');
+}
+async function serviceAction(a) {
+  const conf = {
+    install: 'Instalez VideoEncoder ca serviciu Windows?\n\nVa apărea promptul de administrator (UAC). Joburile care rulează acum vor fi întrerupte, iar serviciul preia interfața.',
+    start: 'Pornesc serviciul? Aplicația curentă se va închide, iar serviciul preia interfața.',
+    stop: 'Oprești serviciul? Interfața nu va mai fi disponibilă până pornești din nou VideoEncoder.exe.',
+    uninstall: 'Dezinstalezi serviciul VideoEncoder?' + (sys.is_service ? '\n\nInterfața se va închide. Pornește apoi VideoEncoder.exe normal.' : ''),
+  }[a];
+  if (!confirm(conf)) return;
+  const msg = $('#svcMsg');
+  msg.textContent = sys.is_service ? 'Se execută…' : 'Confirmă promptul de administrator (UAC) de pe ecran…';
+  try {
+    const r = await api('/api/service/' + a, { method:'POST' });
+    if (r.handover) { msg.textContent = 'Serviciul pornește, se preia interfața…'; waitReconnect(true); }
+    else if (r.stopping) { msg.textContent = 'Serviciul se oprește…'; setTimeout(() => { document.body.innerHTML = '<div class="empty" style="margin:60px">Serviciul VideoEncoder a fost oprit' + (a === 'uninstall' ? ' și dezinstalat' : '') + '. Pornește VideoEncoder.exe pentru a-l folosi din nou.</div>'; }, 1500); }
+    else { msg.textContent = 'Gata.'; setTimeout(loadService, 2500); setTimeout(loadService, 6000); }
+  } catch (e) { msg.innerHTML = '<span class="err">' + esc(e.message) + '</span>'; }
+}
+function waitReconnect(expectService) {
+  let down = false, tries = 0;
+  const t = setInterval(async () => {
+    tries++;
+    try {
+      const s = await fetch('/api/system', { cache:'no-store' }).then(r => r.json());
+      if (down || (expectService && s.is_service)) { clearInterval(t); location.reload(); }
+    } catch { down = true; }
+    if (tries > 120) { clearInterval(t); $('#svcMsg').textContent = 'Serviciul nu a răspuns. Verifică services.msc și videoencoder.log.'; }
+  }, 1500);
+}
+
 // ====================== evenimente ======================
 function showPage(p) {
   $$('nav button').forEach(b => b.classList.toggle('on', b.dataset.page === p));
   $$('.page').forEach(s => s.classList.toggle('on', s.id === 'page-' + p));
-  if (p === 'settings') { loadSettings(); loadSystem(); }
+  if (p === 'settings') { loadSettings(); loadSystem(); loadService(); }
   if (p === 'presets') renderPresetsPage();
   if (p === 'queue') refreshJobs();
   try { localStorage.setItem('ve_page', p); } catch {}
@@ -551,6 +602,7 @@ function bind() {
 
   // setări
   $('#saveSettings').onclick = saveSettings;
+  $('#svcBtns').onclick = e => { const b = e.target.closest('[data-svc]'); if (b) serviceAction(b.dataset.svc); };
   $('#testHwBtn').onclick = async () => { $('#testHwBtn').disabled = true; toast('Testez encoderele…'); try { sys = await api('/api/system/test-hw', { method:'POST' }); } catch {} $('#testHwBtn').disabled = false; loadSystem(); };
   $('#dlFFBtn').onclick = async () => {
     try { await api('/api/ffmpeg/download', { method:'POST' }); clearInterval(dlTimer); dlTimer = setInterval(pollDL, 700); pollDL(); }

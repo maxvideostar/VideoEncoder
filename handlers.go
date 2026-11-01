@@ -174,7 +174,7 @@ func handleSystem(w http.ResponseWriter, r *http.Request) {
 		"encoders": el, "hw": hw, "hw_tested": tested,
 		"local": isLocal(r), "user": user, "port": c.Port, "lan_ips": lanIPs(),
 		"default_pass": c.DefaultPass, "output_dir": c.OutputDir, "base_dir": baseDir,
-		"sep": string(os.PathSeparator),
+		"sep": string(os.PathSeparator), "is_service": isService,
 	})
 }
 
@@ -188,6 +188,11 @@ func handleShutdown(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		log.Printf("oprire cerută din interfață")
+		if isService {
+			stopSelfService()
+			return
+		}
+		jobs.KillAll()
 		os.Exit(0)
 	}()
 }
