@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -369,6 +370,9 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		if effectiveQSVMode(o) != "cpudec" {
 			a = append(a, "-hwaccel", "d3d11va")
 		}
+	} else if o.HWDecode && strings.HasSuffix(o.VCodec, "_amf") && runtime.GOOS == "windows" {
+		// AMD: D3D11VA (-hwaccel auto alege DXVA2, care nu merge ca serviciu)
+		a = append(a, "-hwaccel", "d3d11va")
 	} else if o.HWDecode {
 		a = append(a, "-hwaccel", "auto")
 	}
