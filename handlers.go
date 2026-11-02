@@ -806,3 +806,37 @@ func downloadFFmpeg() {
 	log.Printf("FFmpeg instalat în %s", dir)
 	detectEncoders()
 }
+
+// ================= Starea formularului (persistentă) =================
+
+var uiMu sync.Mutex
+
+func uiStateFile() string { return filepath.Join(baseDir, "ui_state.json") }
+
+func handleGetUIState(w http.ResponseWriter, r *http.Request) {
+	uiMu.Lock()
+	defer uiMu.Unlock()
+	b, err := os.ReadFile(uiStateFile())
+	if err != nil || !json.Valid(b) {
+		writeJSON(w, map[string]any{})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(b)
+}
+
+func handleSaveUIState(w http.ResponseWriter, r *http.Request) {
+	b, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil || !json.Valid(b) {
+		writeErr(w, 400, "stare invalidă")
+		return
+	}
+	uiMu.Lock()
+	tmp := uiStateFile() + ".tmp"
+	if os.WriteFile(tmp, b, 0644) == nil {
+		os.Rename(tmp, uiStateFile())
+	}
+	uiMu.Unlock()
+	writeJSON(w, map[string]any{"ok": true})
+}

@@ -63,7 +63,16 @@ func NewJobManager() *JobManager {
 		var list []*Job
 		if json.Unmarshal(b, &list) == nil {
 			for _, j := range list {
-				if j.Status == "running" || j.Status == "paused" {
+				resume := j.Stream && j.Options != nil && j.Options.AutoRestart &&
+					(j.Status == "running" || j.Status == "paused" || j.Status == "queued" ||
+						(j.Status == "error" && strings.HasPrefix(j.Error, "repornire automată")))
+				if resume {
+					// stream-urile live repornesc singure după restart (aplicație / serviciu / PC)
+					j.Status, j.Error, j.Progress, j.OutTime, j.Size, j.ETA = "queued", "", 0, 0, 0, 0
+					j.Finished = nil
+					j.Restarts++
+					log.Printf("stream %s -> %s: repornesc după restart", filepath.Base(j.Input), j.Output)
+				} else if j.Status == "running" || j.Status == "paused" {
 					j.Status = "error"
 					j.Error = "întrerupt (aplicația a fost repornită)"
 				}

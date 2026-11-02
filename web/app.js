@@ -168,8 +168,25 @@ function updateUI() {
   schedulePreview();
 }
 
-let pvTimer;
-function schedulePreview() { clearTimeout(pvTimer); pvTimer = setTimeout(preview, 250); }
+let pvTimer, stTimer, stateReady = false;
+function schedulePreview() { clearTimeout(pvTimer); pvTimer = setTimeout(preview, 250); saveState(); }
+// starea formularului se păstrează pe server (supraviețuiește restartului aplicației/serviciului)
+function saveState() {
+  if (!stateReady) return;
+  clearTimeout(stTimer);
+  stTimer = setTimeout(() => {
+    api('/api/ui-state', { method:'POST', body:{ opts, sources, selSrc, preset: currentPreset } }).catch(() => {});
+  }, 600);
+}
+async function loadState() {
+  try {
+    const st = await api('/api/ui-state');
+    if (st && st.opts) { opts = { ...DEFAULTS, ...st.opts }; }
+    if (st && Array.isArray(st.sources)) sources = st.sources.filter(Boolean);
+    if (st && st.preset) currentPreset = st.preset;
+    if (st && st.selSrc && sources.includes(st.selSrc)) selSrc = st.selSrc; else selSrc = sources[0] || null;
+  } catch {}
+}
 async function preview() {
   try {
     const r = await api('/api/preview', { method:'POST', body:{ input: selSrc || sources[0] || '', options: opts } });
@@ -648,9 +665,12 @@ function bind() {
 // ====================== pornire ======================
 (async function init() {
   bind();
+  await loadState();
   writeForm();
   renderSources();
   await loadPresets();
+  stateReady = true;
+  if (selSrc) selectSource(selSrc);
   await loadSystem();
   if (!sys.ffmpeg_version) toast('FFmpeg nu a fost găsit. Mergi la Setări → „Descarcă FFmpeg”.', 'e');
   else if (!sys.hw_tested) setTimeout(loadSystem, 4000);

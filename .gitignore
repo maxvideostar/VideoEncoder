@@ -7,3 +7,4 @@ output/
 uploads/
 ffmpeg/
 *.syso
+ui_state.json

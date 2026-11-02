@@ -56,6 +56,7 @@ Un singur fișier `VideoEncoder.exe`, fără instalare, fără dependențe.
 Opțiuni:
 - **Viteză reală (-re)** – obligatoriu când sursa e fișier (altfel ffmpeg trimite cât de repede poate)
 - **Repornire automată** – dacă serverul cade sau sursa live se întrerupe, repornește după 5 s (numărul de reporniri apare în coadă)
+- **După restart** (aplicație, serviciu sau PC), stream-urile cu repornire automată pornesc singure; sursele și setările din formular se păstrează (`ui_state.json`)
 - Stream-urile nu ocupă locuri în coadă și pornesc imediat, chiar dacă coada e oprită
 - Formatul se alege după protocol: RTMP → FLV, SRT/UDP → MPEG-TS, RTSP → RTSP/TCP
 - Presetări incluse: *Stream RTMP 720p 2,5 Mbps*, *Stream RTMP 1080p 5 Mbps*, *Stream RTMP – Intel QuickSync*, *Restream (copiere)*, *Stream MPEG-TS UDP/SRT 1080i→1080p*

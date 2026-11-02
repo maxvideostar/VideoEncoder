@@ -20,7 +20,7 @@ import (
 )
 
 const AppName = "VideoEncoder"
-const AppVersion = "1.2.2"
+const AppVersion = "1.2.3"
 
 //go:embed web
 var webFS embed.FS
@@ -291,6 +291,8 @@ func registerRoutes(mux *http.ServeMux) {
 	api("POST /api/jobs/{id}/{action}", handleJobAction)
 	api("GET /api/jobs/{id}/download", handleJobDownload)
 
+	api("GET /api/ui-state", handleGetUIState)
+	api("POST /api/ui-state", handleSaveUIState)
 	api("GET /api/presets", handleListPresets)
 	api("POST /api/presets", handleSavePreset)
 	api("DELETE /api/presets/{name}", handleDeletePreset)
