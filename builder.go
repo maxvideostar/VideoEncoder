@@ -496,15 +496,15 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			h, err := strconv.Atoi(o.Resolution)
 			switch {
 			case o.Resolution == "custom" && o.Width > 0 && o.Height > 0:
-				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s", o.Width, o.Height, sf))
+				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s,setsar=1", o.Width, o.Height, sf))
 			case o.Resolution == "custom" && o.Height > 0:
-				vf = append(vf, fmt.Sprintf("scale=trunc(%d*iw/(2*ih)/2)*2:%d:flags=%s", o.Height, o.Height, sf))
+				vf = append(vf, fmt.Sprintf("scale=trunc(%d*iw/(2*ih)/2)*2:%d:flags=%s,setsar=1", o.Height, o.Height, sf))
 			case o.Resolution == "custom" && o.Width > 0:
-				vf = append(vf, fmt.Sprintf("scale=%d:trunc(%d*2*ih/iw/2)*2:flags=%s", o.Width, o.Width, sf))
+				vf = append(vf, fmt.Sprintf("scale=%d:trunc(%d*2*ih/iw/2)*2:flags=%s,setsar=1", o.Width, o.Width, sf))
 			case err == nil && h > 0:
-				vf = append(vf, fmt.Sprintf("scale=trunc(%d*iw/(2*ih)/2)*2:%d:flags=%s", h, h, sf))
+				vf = append(vf, fmt.Sprintf("scale=trunc(%d*iw/(2*ih)/2)*2:%d:flags=%s,setsar=1", h, h, sf))
 			default:
-				vf = append(vf, "scale=iw:ih*2:flags="+sf)
+				vf = append(vf, "scale=iw:ih*2:flags="+sf+",setsar=1")
 			}
 		}
 		switch o.Resolution {
