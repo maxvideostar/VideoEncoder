@@ -20,7 +20,7 @@ import (
 )
 
 const AppName = "VideoEncoder"
-const AppVersion = "1.3.2"
+const AppVersion = "1.4.0"
 
 //go:embed web
 var webFS embed.FS
@@ -105,11 +105,43 @@ func main() {
 	fService := flag.Bool("service", false, "(intern) rulare ca serviciu Windows")
 	svcUser := flag.String("svc-user", "", "cont pentru serviciu (implicit LocalSystem), ex: .\\Cristian")
 	svcPass := flag.String("svc-pass", "", "parola contului pentru serviciu")
+	fVersion := flag.Bool("version", false, "afișează versiunea")
+	setUser := flag.String("set-user", "", "setează utilizatorul pentru accesul extern și iese")
+	setPass := flag.String("set-password", "", "setează parola pentru accesul extern și iese")
+	setPort := flag.Int("set-port", 0, "setează portul HTTP și iese")
+	setFF := flag.String("set-ffmpeg", "", "setează calea ffmpeg.exe (ffprobe.exe din același folder) și iese")
 	flag.Parse()
+	if *fVersion {
+		fmt.Println(AppVersion)
+		return
+	}
 	if *dataDir != "" {
 		baseDir = *dataDir
 	}
 	os.MkdirAll(baseDir, 0755)
+
+	if *setUser != "" || *setPass != "" || *setPort > 0 || *setFF != "" {
+		loadConfig()
+		if *setUser != "" {
+			cfg.Username = *setUser
+		}
+		if *setPass != "" {
+			cfg.Salt = randToken(16)
+			cfg.PassHash = hashPass(*setPass, cfg.Salt)
+			cfg.DefaultPass = false
+		}
+		if *setPort > 0 && *setPort < 65536 {
+			cfg.Port = *setPort
+		}
+		if *setFF != "" {
+			cfg.FFmpegPath = *setFF
+			cfg.FFprobePath = filepath.Join(filepath.Dir(*setFF), exeName("ffprobe"))
+			cfg.QSVModeOK = ""
+		}
+		saveConfig()
+		fmt.Println("config.json actualizat")
+		return
+	}
 
 	if *fInstall || *fUninstall || *fStart || *fStop {
 		os.Exit(serviceCLI(*fInstall, *fUninstall, *fStart, *fStop, *svcUser, *svcPass))

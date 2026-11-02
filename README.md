@@ -27,13 +27,41 @@ Un singur fișier `VideoEncoder.exe`, fără instalare, fără dependențe.
 - Prioritate scăzută pentru FFmpeg (opțional), pornire automată la logare
 - **Serviciu Windows** – pornește cu Windows înainte de logare, fără consolă, repornire automată la crash
 
-## Instalare
+## Instalare (Intel / AMD / NVIDIA)
+
+**Varianta rapidă** – PowerShell ca Administrator:
+
+```powershell
+irm https://raw.githubusercontent.com/maxvideostar/VideoEncoder/main/install.ps1 | iex
+```
+
+**Sau** descarcă arhiva și dă dublu-click pe `Install-VideoEncoder.bat`.
+
+Installerul face tot:
+
+1. **Detectează placa video** (Intel / AMD / NVIDIA) și verifică dacă are driver (avertizează la „Microsoft Basic Display”)
+2. Instalează `VideoEncoder.exe` în `C:\VideoEncoder`
+3. Descarcă **FFmpeg** și **testează encoderul hardware** (`h264_qsv` / `h264_amf` / `h264_nvenc`); dacă nu merge, încearcă automat FFmpeg 6.1 și 5.1 (compatibile cu drivere vechi – ex. Intel HD 500, AMD Radeon R5E) și îl alege pe cel care funcționează
+4. Setează portul și parola pentru accesul extern
+5. Deschide portul în **Windows Firewall**
+6. Dezactivează **sleep / hibernare** (pentru stream 24/7)
+7. Instalează **serviciul Windows** (pornește cu Windows, stream-urile repornesc singure)
+8. Creează scurtături (Desktop + Start) și intrarea în **Aplicații instalate** (dezinstalare de acolo)
+
+Parametri: `-Dir C:\VideoEncoder -Port 8090 -Password PAROLA -NoService -Silent`
+Exemplu fără întrebări: `Install-VideoEncoder.bat -Password parola123 -Silent`
+
+Reinstalare / actualizare: rulezi din nou installerul (setările, coada și presetările se păstrează).
+Dezinstalare: `Uninstall-VideoEncoder.bat` sau din *Aplicații instalate*.
+
+> Driverele plăcii video nu pot fi incluse în installer – dacă lipsesc, installerul deschide pagina oficială Intel / AMD / NVIDIA.
+> Intel HD 500/4600: Intel Driver & Support Assistant · AMD Radeon R5E (Futro S930): AMD Software 21.5.2 sau driverul AMD Embedded G-Series.
+
+### Instalare manuală
 
 1. Descarcă `VideoEncoder.exe` într-un folder, ex. `C:\VideoEncoder\`
-2. Pornește-l. Se deschide fereastra aplicației. Fereastra neagră (consola) este serverul – las-o deschisă (minimizată); închiderea ei oprește aplicația.
-3. Dacă FFmpeg nu e găsit: **Setări → Descarcă / actualizează FFmpeg** (se pune în `C:\VideoEncoder\ffmpeg\`).
-   Alternativ, pune `ffmpeg.exe` + `ffprobe.exe` lângă exe sau setează calea în Setări.
-4. **Schimbă parola** din Setări (implicit `admin` / `admin`) înainte să deschizi accesul extern.
+2. Pornește-l. Dacă FFmpeg nu e găsit: **Setări → Descarcă / actualizează FFmpeg**.
+3. **Schimbă parola** din Setări (implicit `admin` / `admin`).
 
 ## Acces extern
 
