@@ -73,14 +73,31 @@ func runQuiet(timeout time.Duration, exe string, args ...string) ([]byte, error)
 	return buf.Bytes(), err
 }
 
+// runSplit – stdout și stderr separate (ffprobe scrie avertismente pe stderr)
+func runSplit(timeout time.Duration, exe string, args ...string) ([]byte, []byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, args...)
+	setProcAttrs(cmd, false)
+	var out, errb bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errb
+	err := cmd.Run()
+	return out.Bytes(), errb.Bytes(), err
+}
+
 func probeDuration(path string) float64 {
-	out, err := runQuiet(30*time.Second, ffprobeExe(), "-v", "error", "-show_entries", "format=duration",
+	out, _, err := runSplit(30*time.Second, ffprobeExe(), "-v", "error", "-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1", path)
 	if err != nil {
 		return 0
 	}
-	v, _ := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
-	return v
+	for _, l := range strings.Split(string(out), "\n") {
+		if v, err := strconv.ParseFloat(strings.TrimSpace(l), 64); err == nil && v > 0 {
+			return v
+		}
+	}
+	return 0
 }
 
 var (
@@ -452,9 +469,16 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 func handleProbe(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Query().Get("path")
-	out, err := runQuiet(30*time.Second, ffprobeExe(), "-v", "error", "-print_format", "json", "-show_format", "-show_streams", p)
-	if err != nil {
-		writeErr(w, 400, strings.TrimSpace(string(out))+" "+err.Error())
+	out, stderr, err := runSplit(30*time.Second, ffprobeExe(), "-v", "error", "-print_format", "json", "-show_format", "-show_streams", p)
+	if !json.Valid(out) || !bytes.Contains(out, []byte(`"format"`)) {
+		msg := strings.TrimSpace(string(stderr))
+		if lines := strings.Split(msg, "\n"); len(lines) > 3 {
+			msg = strings.Join(lines[len(lines)-3:], "\n")
+		}
+		if err != nil {
+			msg += " (" + err.Error() + ")"
+		}
+		writeErr(w, 400, "ffprobe: "+msg)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

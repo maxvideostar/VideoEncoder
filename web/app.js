@@ -13,7 +13,9 @@ async function api(path, opts = {}) {
   const r = await fetch(path, o);
   if (r.status === 401) { location.href = '/login'; throw new Error('neautentificat'); }
   const ct = r.headers.get('content-type') || '';
-  const data = ct.includes('json') ? await r.json() : await r.text();
+  const txt = await r.text();
+  let data = txt;
+  if (ct.includes('json')) { try { data = JSON.parse(txt); } catch { data = { error: 'Răspuns invalid de la server: ' + txt.slice(0, 200) }; if (r.ok) throw new Error(data.error); } }
   if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
   return data;
 }
