@@ -39,6 +39,7 @@ type Job struct {
 	Log      []string       `json:"log,omitempty"`
 	Stream   bool           `json:"stream"`
 	Restarts int            `json:"restarts"`
+	PID      int            `json:"pid,omitempty"`
 	QSVAuto  bool           `json:"qsv_auto,omitempty"` // modul QSV e ales automat (rezervă)
 
 	cmd      *exec.Cmd
@@ -228,6 +229,9 @@ func (m *JobManager) run(j *Job) {
 		m.finish(j, fmt.Errorf("nu pot porni ffmpeg (%s): %v", exe, err))
 		return
 	}
+	m.mu.Lock()
+	j.PID = cmd.Process.Pid
+	m.mu.Unlock()
 	log.Printf("job %s pornit: %s", j.ID, filepath.Base(j.Input))
 
 	var wg sync.WaitGroup
@@ -354,6 +358,7 @@ func (m *JobManager) finish(j *Job, err error) {
 	now := time.Now()
 	j.Finished = &now
 	j.cmd = nil
+	j.PID = 0
 	switch {
 	case j.canceled:
 		j.Status = "canceled"

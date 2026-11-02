@@ -20,7 +20,7 @@ import (
 )
 
 const AppName = "VideoEncoder"
-const AppVersion = "1.2.6"
+const AppVersion = "1.3.0"
 
 //go:embed web
 var webFS embed.FS
@@ -189,6 +189,7 @@ func main() {
 func startServer(ln net.Listener, c Config, localURL string, open bool) *http.Server {
 
 	jobs = NewJobManager()
+	go sysMonitorLoop()
 	go detectEncoders()
 
 	mux := http.NewServeMux()

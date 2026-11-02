@@ -166,3 +166,23 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .st-pill.live{background:rgba(255,93,93,.15);color:var(--err)}
 .bar.indet i{background:repeating-linear-gradient(90deg,var(--accent) 0 18px,var(--accent2) 18px 36px);background-size:72px 100%;animation:indet 1.2s linear infinite}
 @keyframes indet{from{background-position:0 0}to{background-position:72px 0}}
+
+/* monitor sistem */
+.sysbadge{display:flex;gap:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}
+.sysbadge .m{display:flex;align-items:center;gap:5px}
+.sysbadge .m i{display:inline-block;width:34px;height:6px;border-radius:3px;background:var(--line2);overflow:hidden;position:relative}
+.sysbadge .m i b{position:absolute;left:0;top:0;bottom:0;background:var(--ok)}
+.sysbadge .m.warn i b{background:var(--warn)} .sysbadge .m.hot i b{background:var(--err)}
+.syspanel{display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:0}
+.sp-item{padding:12px 14px;border-left:1px solid var(--line)} .sp-item:first-child{border-left:0}
+.sp-h{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px}
+.sp-h b{color:var(--text);font-family:var(--mono);font-size:15px}
+.mbar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.mbar i{display:block;height:100%;width:0;background:var(--ok);transition:width .6s}
+.mbar i.warn{background:var(--warn)} .mbar i.hot{background:var(--err)}
+.spark{width:100%;height:28px;margin-top:6px;display:block}
+.spark polyline{fill:none;stroke:var(--accent);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.spark polygon{fill:var(--accentbg)}
+.jload{color:var(--info)}
+@media (max-width:980px){.sysbadge{display:none}}
+@media (max-width:640px){.syspanel{grid-template-columns:1fr}.sp-item{border-left:0;border-top:1px solid var(--line)}.sp-item:first-child{border-top:0}}

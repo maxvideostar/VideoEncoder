@@ -9,6 +9,7 @@ Un singur fișier `VideoEncoder.exe`, fără instalare, fără dependențe.
 - **Interfață locală** – se deschide automat într-o fereastră de aplicație (Edge/Chrome `--app`), fără parolă pe `127.0.0.1`
 - **Interfață externă** – același UI din rețea / internet, cu utilizator + parolă (blocare 5 min după 5 încercări greșite)
 - **Coadă de joburi** – mai multe fișiere deodată, joburi simultane configurabile, pauză / continuare / anulare / reluare, reordonare
+- **Monitor sistem** – CPU, memorie și placă video (decodare/encodare/procesare, ca în Task Manager) în bara de sus și în Coadă; CPU/GPU/RAM pentru fiecare job
 - **Progres live** – procent, fps, viteză, timp rămas, mărime, bitrate, jurnal FFmpeg complet
 - **Encodere CPU**: H.264 (x264), H.265 (x265), AV1 (SVT-AV1), VP9, ProRes 422 HQ, MPEG-2
 - **Encodere hardware** (detectate și testate automat): NVIDIA NVENC, Intel QuickSync, AMD AMF – H.264 / HEVC / AV1

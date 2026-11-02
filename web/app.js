@@ -350,6 +350,31 @@ function fbRender() {
 
 // ====================== coadă ======================
 let jobsCache = [];
+let lastSys = null;
+const lvl = v => v >= 85 ? 'hot' : v >= 65 ? 'warn' : '';
+const GPU_ENG_RO = { VideoDecode:'decodare', VideoEncode:'encodare', VideoProcessing:'procesare', '3D':'3D', Copy:'copiere', Compute:'calcul' };
+function renderSys(st) {
+  if (!st) return;
+  lastSys = st;
+  const memPct = st.mem_total ? st.mem_used / st.mem_total * 100 : 0;
+  const m = (lbl, v) => `<span class="m ${lvl(v)}">${lbl} ${v.toFixed(0)}%<i><b style="width:${v.toFixed(0)}%"></b></i></span>`;
+  $('#sysbadge').innerHTML = m('CPU', st.cpu) + m('RAM', memPct) + (st.has_gpu ? m('GPU', st.gpu) : '');
+  const setBar = (id, v) => { const e = $(id); e.style.width = v.toFixed(0) + '%'; e.className = lvl(v); };
+  $('#spCpu').textContent = st.cpu.toFixed(0) + '%'; setBar('#spCpuBar', st.cpu);
+  $('#spMem').textContent = memPct.toFixed(0) + '%'; setBar('#spMemBar', memPct);
+  $('#spMemTxt').textContent = `${fmtSize(st.mem_used)} / ${fmtSize(st.mem_total)} · ${st.cores} nuclee`;
+  $('#spGpuBox').style.display = st.has_gpu ? '' : 'none';
+  if (st.has_gpu) {
+    $('#spGpu').textContent = st.gpu.toFixed(0) + '%'; setBar('#spGpuBar', st.gpu);
+    const e = Object.entries(st.gpu_eng || {}).filter(([k, v]) => v >= 0.5 || /Video/.test(k)).sort((a, b) => b[1] - a[1]);
+    $('#spGpuEng').textContent = e.map(([k, v]) => `${GPU_ENG_RO[k] || k} ${v.toFixed(0)}%`).join(' · ');
+  }
+  const h = st.history || [];
+  if (h.length > 1) {
+    const pts = h.map((v, i) => `${(i / (h.length - 1) * 120).toFixed(1)},${(28 - v / 100 * 27).toFixed(1)}`).join(' ');
+    $('#spSpark').innerHTML = `<polygon points="0,28 ${pts} 120,28"/><polyline points="${pts}"/>`;
+  }
+}
 const jobHTML = new Map();
 const STATUS_RO = { queued:'în așteptare', running:'rulează', paused:'pauză', done:'gata', error:'eroare', canceled:'anulat' };
 function jobCard(j) {
@@ -382,6 +407,7 @@ function jobCard(j) {
       ${j.duration ? `<span>timp <b>${fmtTime(j.out_time)}</b> / ${fmtTime(j.duration)}</span>` : ''}
       ${live && !isLive ? '' : ''}${live ? `<span>fps <b>${(j.fps||0).toFixed(0)}</b></span><span>viteză <b>${esc(j.speed || '—')}</b></span><span>rămas <b>${j.eta ? fmtTime(j.eta) : '—'}</b></span>` : ''}
       ${j.size ? `<span>mărime <b>${fmtSize(j.size)}</b></span>` : ''}
+      ${live && j.pid && lastSys && lastSys.procs && lastSys.procs[j.pid] ? (p => `<span class="jload">CPU <b>${p.cpu.toFixed(0)}%</b></span>${lastSys.has_gpu ? `<span class="jload">GPU <b>${p.gpu.toFixed(0)}%</b></span>` : ''}<span class="jload">RAM <b>${fmtSize(p.mem)}</b></span>`)(lastSys.procs[j.pid]) : ''}
       ${j.bitrate && live ? `<span>bitrate <b>${esc(j.bitrate)}</b></span>` : ''}
       ${j.finished && j.started ? `<span>durată encodare <b>${fmtTime((new Date(j.finished) - new Date(j.started)) / 1000)}</b></span>` : ''}
     </div>
@@ -391,6 +417,7 @@ function jobCard(j) {
 async function refreshJobs() {
   try {
     const d = await api('/api/jobs');
+    renderSys(d.sys);
     jobsCache = d.jobs || [];
     const active = jobsCache.filter(j => ['queued','running','paused'].includes(j.status)).length;
     const running = jobsCache.filter(j => j.status === 'running').length;
@@ -683,5 +710,5 @@ function bind() {
     const busy = jobsCache.some(j => j.status === 'running' || j.status === 'queued');
     if (busy || $('#page-queue').classList.contains('on')) refreshJobs();
   }, 1000);
-  setInterval(refreshJobs, 5000);
+  setInterval(refreshJobs, 2500);
 })();

@@ -17,6 +17,7 @@
     <button data-page="settings">Setări</button>
   </nav>
   <div class="hdr-right">
+    <span class="sysbadge" id="sysbadge" title="Încărcarea calculatorului"></span>
     <span class="badge hide-sm" id="ffbadge">FFmpeg…</span>
     <span class="badge" id="modebadge">…</span>
     <button class="btn sm" id="logoutBtn" style="display:none">Ieșire</button>
@@ -253,6 +254,11 @@
 
 <!-- ================= COADĂ ================= -->
 <section class="page" id="page-queue">
+  <div class="card syspanel" id="sysPanel">
+    <div class="sp-item"><div class="sp-h"><span>Procesor</span><b id="spCpu">—</b></div><div class="mbar"><i id="spCpuBar"></i></div><svg class="spark" id="spSpark" viewBox="0 0 120 28" preserveAspectRatio="none"></svg></div>
+    <div class="sp-item"><div class="sp-h"><span>Memorie</span><b id="spMem">—</b></div><div class="mbar"><i id="spMemBar"></i></div><div class="hint" id="spMemTxt"></div></div>
+    <div class="sp-item" id="spGpuBox"><div class="sp-h"><span>Placă video</span><b id="spGpu">—</b></div><div class="mbar"><i id="spGpuBar"></i></div><div class="hint" id="spGpuEng"></div></div>
+  </div>
   <div class="qtools">
     <button class="btn" id="qPauseBtn">⏸ Oprește pornirea joburilor</button>
     <span class="grow muted" id="qSummary"></span>

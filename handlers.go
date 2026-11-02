@@ -513,7 +513,7 @@ func handlePreview(w http.ResponseWriter, r *http.Request) {
 
 func handleListJobs(w http.ResponseWriter, r *http.Request) {
 	list, paused := jobs.List()
-	writeJSON(w, map[string]any{"jobs": list, "paused": paused})
+	writeJSON(w, map[string]any{"jobs": list, "paused": paused, "sys": sysSnapshot()})
 }
 
 func handleCreateJobs(w http.ResponseWriter, r *http.Request) {
