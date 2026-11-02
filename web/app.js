@@ -52,7 +52,8 @@ const BUILTIN = [
   { n:'WebM VP9 + Opus', o:{ container:'webm', vcodec:'libvpx-vp9', quality:32, speed:4, acodec:'libopus', abitrate:'128k', faststart:false } },
   { n:'Stream RTMP 720p – 2,5 Mbps (YouTube/Facebook/nginx)', o:{ output_mode:'stream', resolution:'720', fps:'25', rate_mode:'bitrate', vbitrate:'2500k', maxrate:'2500k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'128k', asamplerate:'44100', achannels:'2', faststart:false } },
   { n:'Stream RTMP 1080p – 5 Mbps', o:{ output_mode:'stream', resolution:'1080', fps:'25', rate_mode:'bitrate', vbitrate:'5000k', maxrate:'5000k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'160k', asamplerate:'48000', achannels:'2', faststart:false } },
-  { n:'Stream RTMP – Intel QuickSync 720p', o:{ output_mode:'stream', vcodec:'h264_qsv', resolution:'720', fps:'25', rate_mode:'bitrate', vbitrate:'2500k', maxrate:'2500k', gop:50, acodec:'aac', abitrate:'128k', achannels:'2', faststart:false } },
+  { n:'Stream RTMP – Intel QuickSync 720p (TV 1080i, tot pe GPU)', o:{ output_mode:'stream', vcodec:'h264_qsv', hw_decode:true, deinterlace:true, resolution:'720', fps:'25', rate_mode:'bitrate', vbitrate:'2500k', maxrate:'2500k', gop:50, speed:4, acodec:'aac', abitrate:'128k', asamplerate:'48000', achannels:'2', faststart:false } },
+  { n:'Stream RTMP – Intel QuickSync 1080p (TV 1080i, tot pe GPU)', o:{ output_mode:'stream', vcodec:'h264_qsv', hw_decode:true, deinterlace:true, resolution:'keep', fps:'25', rate_mode:'bitrate', vbitrate:'4500k', maxrate:'4500k', gop:50, speed:4, acodec:'aac', abitrate:'160k', asamplerate:'48000', achannels:'2', faststart:false } },
   { n:'Restream (copiere, fără re-encodare)', o:{ output_mode:'stream', vcodec:'copy', acodec:'copy', faststart:false } },
   { n:'Stream MPEG-TS UDP/SRT 1080i25 → 1080p', o:{ output_mode:'stream', deinterlace:true, resolution:'1080', fps:'25', rate_mode:'bitrate', vbitrate:'6000k', maxrate:'6000k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'192k', asamplerate:'48000', faststart:false } },
   { n:'GIF animat 480px', o:{ container:'gif', fps:'12', resolution:'keep', faststart:false } },
@@ -135,6 +136,10 @@ function updateUI() {
   show('.fileout', !stream);
   show('.streamout', stream);
   if (stream) $('#streamHint').textContent = streamHint(opts.stream_url);
+  if (stream && /\s/.test(opts.stream_url || '')) $('#streamHint').innerHTML = '<span class="err">⚠ URL-ul conține spații – vor fi eliminate automat.</span> ' + esc(streamHint(opts.stream_url));
+  const hwl = $('[data-o=hw_decode]').closest('label');
+  hwl.title = /_qsv$/.test(opts.vcodec) ? 'Cu Intel QSV: decodare + deîntrețesere + scalare + encodare complet pe placa video (vpp_qsv) – recomandat pe procesoare slabe' : 'Decodare pe placa video (-hwaccel auto)';
+  hwl.lastChild.textContent = /_qsv$/.test(opts.vcodec) ? ' Totul pe GPU Intel (decodare + filtre)' : ' Decodare hardware';
   $('#enqueueBtn').textContent = stream ? '● Pornește stream-ul' : '＋ Adaugă în coadă';
   $('[data-o=tune]').closest('label').style.display = enc && /^libx26/.test(opts.vcodec) ? '' : 'none';
 

@@ -103,7 +103,7 @@ func streamFormat(url string) string {
 
 func OutputPath(input string, o *EncodeOptions) string {
 	if o.IsStream() {
-		return strings.TrimSpace(o.StreamURL)
+		return cleanURL(o.StreamURL)
 	}
 	dir := o.OutDir
 	if o.SameDir {
@@ -265,8 +265,59 @@ func filterPath(p string) string {
 	return p
 }
 
+// cleanURL elimină spațiile (ex. "rtmp://host/live /cheie" -> "rtmp://host/live/cheie")
+func cleanURL(u string) string {
+	return strings.Join(strings.Fields(u), "")
+}
+
+// NormRate: "1000" -> "1000k" (valorile fără unitate sunt luate ca kbps), "2.5 M" -> "2.5M"
+func NormRate(r string) string {
+	r = strings.ReplaceAll(strings.TrimSpace(r), " ", "")
+	if r == "" {
+		return r
+	}
+	low := strings.ToLower(r)
+	low = strings.TrimSuffix(strings.TrimSuffix(low, "bps"), "b")
+	if v, err := strconv.ParseFloat(low, 64); err == nil {
+		if v < 100000 { // nimeni nu vrea sub 100 kbit/s în biți – e kbps
+			return strconv.FormatFloat(v, 'f', -1, 64) + "k"
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	if n := len(low); n > 1 {
+		num, unit := low[:n-1], low[n-1:]
+		if _, err := strconv.ParseFloat(num, 64); err == nil && (unit == "k" || unit == "m") {
+			if unit == "m" {
+				unit = "M"
+			}
+			return num + unit
+		}
+	}
+	return r
+}
+
+// useQSVPipeline – decodare + filtre + encodare complet pe GPU Intel (ideal pentru procesoare slabe)
+func useQSVPipeline(o *EncodeOptions) bool {
+	return strings.HasSuffix(o.VCodec, "_qsv") && o.HWDecode && o.Subs != "burn" &&
+		strings.TrimSpace(o.VFilter) == "" && o.Container != "gif" && !audioOnlyCont(o)
+}
+
+func audioOnlyCont(o *EncodeOptions) bool {
+	if o.IsStream() {
+		return false
+	}
+	_, ok := audioOnly[o.Container]
+	return ok
+}
+
 // BuildArgs construiește argumentele ffmpeg (fără executabil)
 func BuildArgs(input, output string, o *EncodeOptions) []string {
+	o.VBitrate, o.MaxRate, o.ABitrate = NormRate(o.VBitrate), NormRate(o.MaxRate), NormRate(o.ABitrate)
+	if o.IsStream() {
+		o.StreamURL = cleanURL(o.StreamURL)
+		output = cleanURL(output)
+	}
+	qsvFull := useQSVPipeline(o)
 	a := []string{"-hide_banner", "-nostdin"}
 	stream := o.IsStream()
 	if o.Overwrite || stream {
@@ -274,7 +325,9 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 	} else {
 		a = append(a, "-n")
 	}
-	if o.HWDecode {
+	if qsvFull {
+		a = append(a, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
+	} else if o.HWDecode {
 		a = append(a, "-hwaccel", "auto")
 	}
 	start, hasStart := ParseTime(o.Start)
@@ -353,6 +406,42 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			a = append(a, "-profile:v", "3")
 		}
 		var vf []string
+		if qsvFull {
+			// totul pe GPU: vpp_qsv face deîntrețesere + scalare + format
+			var vpp []string
+			if o.Deinterlace {
+				vpp = append(vpp, "deinterlace=2")
+			}
+			switch o.Resolution {
+			case "", "keep":
+			case "custom":
+				switch {
+				case o.Width > 0 && o.Height > 0:
+					vpp = append(vpp, fmt.Sprintf("w=%d:h=%d", o.Width, o.Height))
+				case o.Height > 0:
+					vpp = append(vpp, fmt.Sprintf("w=trunc(%d*iw/ih/2)*2:h=%d", o.Height, o.Height))
+				case o.Width > 0:
+					vpp = append(vpp, fmt.Sprintf("w=%d:h=trunc(%d*ih/iw/2)*2", o.Width, o.Width))
+				}
+			default:
+				if h, err := strconv.Atoi(o.Resolution); err == nil && h > 0 {
+					vpp = append(vpp, fmt.Sprintf("w=trunc(%d*iw/ih/2)*2:h=%d", h, h))
+				}
+			}
+			if strings.Contains(o.PixFmt, "10") {
+				vpp = append(vpp, "format=p010")
+			}
+			if len(vpp) > 0 {
+				a = append(a, "-vf", "vpp_qsv="+strings.Join(vpp, ":"))
+			}
+			if o.FPS != "" && o.FPS != "keep" {
+				a = append(a, "-r", o.FPS)
+			}
+			if o.GOP > 0 {
+				a = append(a, "-g", strconv.Itoa(o.GOP))
+			}
+			goto audio
+		}
 		if o.Deinterlace {
 			vf = append(vf, "bwdif=mode=send_frame:parity=auto:deint=all")
 		}
@@ -386,13 +475,14 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		if o.FPS != "" && o.FPS != "keep" {
 			a = append(a, "-r", o.FPS)
 		}
-		if o.PixFmt != "" {
-			a = append(a, "-pix_fmt", o.PixFmt)
+		if pf := hwPixFmt(vc, o.PixFmt); pf != "" {
+			a = append(a, "-pix_fmt", pf)
 		}
 		if o.GOP > 0 {
 			a = append(a, "-g", strconv.Itoa(o.GOP))
 		}
 	}
+audio:
 
 	// ---------- AUDIO ----------
 	ac := o.ACodec
@@ -542,4 +632,20 @@ func quoteArg(a string) string {
 		return `"` + strings.ReplaceAll(a, `"`, `\"`) + `"`
 	}
 	return a
+}
+
+// hwPixFmt adaptează formatul pixel la ce acceptă encoderele hardware
+func hwPixFmt(codec, pf string) string {
+	if pf == "" {
+		return ""
+	}
+	if strings.HasSuffix(codec, "_qsv") || strings.HasSuffix(codec, "_amf") {
+		switch pf {
+		case "yuv420p":
+			return "nv12"
+		case "yuv420p10le":
+			return "p010le"
+		}
+	}
+	return pf
 }
