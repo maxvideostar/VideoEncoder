@@ -294,7 +294,7 @@ func handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.QSVModeOK != nil {
 		switch *req.QSVModeOK {
-		case "", "d3d11", "dxva2", "hybrid":
+		case "", "d3d11", "dxva2", "hybrid", "cpudec":
 			cfg.QSVModeOK = *req.QSVModeOK
 		}
 	}

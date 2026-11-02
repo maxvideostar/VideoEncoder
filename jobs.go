@@ -317,7 +317,8 @@ func qsvPipelineError(j *Job) bool {
 	for _, l := range j.Log {
 		ll := strings.ToLower(l)
 		for _, k := range []string{"could not create the texture", "frames_ctx", "frames context", "internal frame pool",
-			"mfx session", "vpp_qsv", "error reinitializing filters", "could not open encoder", "qsv"} {
+			"mfx session", "vpp_qsv", "error reinitializing filters", "could not open encoder", "qsv",
+			"device creation failed", "failed to create direct3d", "d3d11va", "dxva2", "hwaccel", "failed setup for format"} {
 			if strings.Contains(ll, k) && !strings.HasPrefix(l, "> ") {
 				return true
 			}

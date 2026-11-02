@@ -299,14 +299,15 @@ func NormRate(r string) string {
 
 // useQSVPipeline – decodare + filtre + encodare complet pe GPU Intel (ideal pentru procesoare slabe)
 func useQSVPipeline(o *EncodeOptions) bool {
-	return strings.HasSuffix(o.VCodec, "_qsv") && o.HWDecode && effectiveQSVMode(o) != "hybrid" && o.Subs != "burn" &&
+	m := effectiveQSVMode(o)
+	return strings.HasSuffix(o.VCodec, "_qsv") && o.HWDecode && m != "hybrid" && m != "cpudec" && o.Subs != "burn" &&
 		strings.TrimSpace(o.VFilter) == "" && o.Container != "gif" && !audioOnlyCont(o)
 }
 
 // effectiveQSVMode: modul ales sau, pe „auto”, ultimul mod care a funcționat pe acest PC
 func effectiveQSVMode(o *EncodeOptions) string {
 	switch o.QSVMode {
-	case "d3d11", "dxva2", "hybrid":
+	case "d3d11", "dxva2", "hybrid", "cpudec":
 		return o.QSVMode
 	}
 	if m := getCfg().QSVModeOK; m != "" {
@@ -316,12 +317,18 @@ func effectiveQSVMode(o *EncodeOptions) string {
 }
 
 // nextQSVMode – ordinea de rezervă pentru „auto”
+// ca serviciu Windows (sesiunea 0) DXVA2/Direct3D 9 nu funcționează – îl sărim
 func nextQSVMode(m string) string {
 	switch m {
 	case "d3d11":
+		if isService {
+			return "hybrid"
+		}
 		return "dxva2"
 	case "dxva2":
 		return "hybrid"
+	case "hybrid":
+		return "cpudec"
 	}
 	return ""
 }
@@ -355,6 +362,11 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 				"-hwaccel", "qsv", "-hwaccel_device", "hw", "-hwaccel_output_format", "qsv", "-filter_hw_device", "hw")
 		} else {
 			a = append(a, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
+		}
+	} else if o.HWDecode && strings.HasSuffix(o.VCodec, "_qsv") {
+		// hibrid: decodare D3D11VA (merge și ca serviciu), filtre pe CPU, encodare QSV
+		if effectiveQSVMode(o) != "cpudec" {
+			a = append(a, "-hwaccel", "d3d11va")
 		}
 	} else if o.HWDecode {
 		a = append(a, "-hwaccel", "auto")
