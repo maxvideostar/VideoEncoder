@@ -27,6 +27,7 @@ type EncodeOptions struct {
 	GOP         int    `json:"gop"`
 	Tune        string `json:"tune"`
 	HWDecode    bool   `json:"hw_decode"`
+	QSVMode     string `json:"qsv_mode"` // auto | d3d11 | dxva2 | hybrid
 
 	ACodec      string `json:"acodec"`
 	ABitrate    string `json:"abitrate"`
@@ -298,8 +299,31 @@ func NormRate(r string) string {
 
 // useQSVPipeline – decodare + filtre + encodare complet pe GPU Intel (ideal pentru procesoare slabe)
 func useQSVPipeline(o *EncodeOptions) bool {
-	return strings.HasSuffix(o.VCodec, "_qsv") && o.HWDecode && o.Subs != "burn" &&
+	return strings.HasSuffix(o.VCodec, "_qsv") && o.HWDecode && effectiveQSVMode(o) != "hybrid" && o.Subs != "burn" &&
 		strings.TrimSpace(o.VFilter) == "" && o.Container != "gif" && !audioOnlyCont(o)
+}
+
+// effectiveQSVMode: modul ales sau, pe „auto”, ultimul mod care a funcționat pe acest PC
+func effectiveQSVMode(o *EncodeOptions) string {
+	switch o.QSVMode {
+	case "d3d11", "dxva2", "hybrid":
+		return o.QSVMode
+	}
+	if m := getCfg().QSVModeOK; m != "" {
+		return m
+	}
+	return "d3d11"
+}
+
+// nextQSVMode – ordinea de rezervă pentru „auto”
+func nextQSVMode(m string) string {
+	switch m {
+	case "d3d11":
+		return "dxva2"
+	case "dxva2":
+		return "hybrid"
+	}
+	return ""
 }
 
 func audioOnlyCont(o *EncodeOptions) bool {
@@ -326,7 +350,12 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		a = append(a, "-n")
 	}
 	if qsvFull {
-		a = append(a, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
+		if effectiveQSVMode(o) == "dxva2" {
+			a = append(a, "-init_hw_device", "qsv=hw:hw_any,child_device_type=dxva2",
+				"-hwaccel", "qsv", "-hwaccel_device", "hw", "-hwaccel_output_format", "qsv", "-filter_hw_device", "hw")
+		} else {
+			a = append(a, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
+		}
 	} else if o.HWDecode {
 		a = append(a, "-hwaccel", "auto")
 	}
@@ -443,7 +472,11 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			goto audio
 		}
 		if o.Deinterlace {
-			vf = append(vf, "bwdif=mode=send_frame:parity=auto:deint=all")
+			if strings.HasSuffix(vc, "_qsv") {
+				vf = append(vf, "yadif=mode=send_frame:parity=auto:deint=all") // mai rapid pe CPU slab
+			} else {
+				vf = append(vf, "bwdif=mode=send_frame:parity=auto:deint=all")
+			}
 		}
 		switch o.Resolution {
 		case "", "keep":

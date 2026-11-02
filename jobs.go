@@ -39,6 +39,7 @@ type Job struct {
 	Log      []string       `json:"log,omitempty"`
 	Stream   bool           `json:"stream"`
 	Restarts int            `json:"restarts"`
+	QSVAuto  bool           `json:"qsv_auto,omitempty"` // modul QSV e ales automat (rezervă)
 
 	cmd      *exec.Cmd
 	canceled bool
@@ -204,7 +205,13 @@ func (m *JobManager) run(j *Job) {
 	m.mu.Lock()
 	j.Duration = dur
 	j.cmd = cmd
-	j.Log = nil
+	var keep []string
+	for _, l := range j.Log {
+		if strings.HasPrefix(l, "⚠ Intel QSV") {
+			keep = append(keep, l)
+		}
+	}
+	j.Log = keep
 	j.addLog("> " + j.Cmd)
 	m.mu.Unlock()
 
@@ -272,6 +279,9 @@ func (m *JobManager) readProgress(j *Job, r io.Reader) {
 		case "total_size":
 			j.Size, _ = strconv.ParseInt(v, 10, 64)
 		case "progress":
+			if j.OutTime > 10 {
+				rememberQSVMode(j)
+			}
 			if j.Duration > 0 {
 				p := j.OutTime / j.Duration * 100
 				if p > 100 {
@@ -290,8 +300,47 @@ func (m *JobManager) readProgress(j *Job, r io.Reader) {
 	}
 }
 
+// qsvPipelineError – eșec la inițializarea pipeline-ului Intel QSV (nu eroare de sursă/rețea)
+func qsvPipelineError(j *Job) bool {
+	if j.OutTime > 1 || j.Options == nil || !strings.HasSuffix(j.Options.VCodec, "_qsv") || !j.Options.HWDecode {
+		return false
+	}
+	for _, l := range j.Log {
+		ll := strings.ToLower(l)
+		for _, k := range []string{"could not create the texture", "frames_ctx", "frames context", "internal frame pool",
+			"mfx session", "vpp_qsv", "error reinitializing filters", "could not open encoder", "qsv"} {
+			if strings.Contains(ll, k) && !strings.HasPrefix(l, "> ") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (m *JobManager) finish(j *Job, err error) {
 	m.mu.Lock()
+	// rezervă automată QSV: d3d11 -> dxva2 -> hibrid
+	if err != nil && !j.canceled && (j.QSVAuto || j.Options.QSVMode == "" || j.Options.QSVMode == "auto") && qsvPipelineError(j) {
+		cur := effectiveQSVMode(j.Options)
+		if next := nextQSVMode(cur); next != "" {
+			o := *j.Options
+			o.QSVMode = next
+			j.Options = &o
+			j.QSVAuto = true
+			o.Overwrite = true
+			j.Args = BuildArgs(j.Input, j.Output, &o)
+			j.Cmd = CommandString(ffmpegExe(), j.Args)
+			j.Status, j.Progress, j.OutTime, j.Size, j.ETA = "queued", 0, 0, 0, 0
+			j.cmd = nil
+			msg := fmt.Sprintf("⚠ Intel QSV în modul %s a eșuat – încerc modul %s", cur, next)
+			j.addLog(msg)
+			log.Printf("job %s: %s", j.ID, msg)
+			m.mu.Unlock()
+			m.saveSoon()
+			m.kick()
+			return
+		}
+	}
 	now := time.Now()
 	j.Finished = &now
 	j.cmd = nil
@@ -325,6 +374,7 @@ func (m *JobManager) finish(j *Job, err error) {
 		}
 		j.Error = msg
 	default:
+		rememberQSVMode(j)
 		j.Status = "done"
 		j.Progress = 100
 		j.ETA = 0
@@ -561,4 +611,22 @@ func (m *JobManager) KillAll() {
 	}
 	m.mu.Unlock()
 	time.Sleep(500 * time.Millisecond)
+}
+
+// rememberQSVMode salvează modul QSV care a funcționat (doar pentru modul automat)
+func rememberQSVMode(j *Job) {
+	if j.Options == nil || !strings.HasSuffix(j.Options.VCodec, "_qsv") || !j.Options.HWDecode {
+		return
+	}
+	if !j.QSVAuto && j.Options.QSVMode != "" && j.Options.QSVMode != "auto" {
+		return
+	}
+	mode := effectiveQSVMode(j.Options)
+	cfgMu.Lock()
+	if cfg.QSVModeOK != mode {
+		cfg.QSVModeOK = mode
+		saveConfig()
+		log.Printf("Intel QSV: modul %s funcționează – salvat pentru joburile următoare", mode)
+	}
+	cfgMu.Unlock()
 }

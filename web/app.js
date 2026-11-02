@@ -30,7 +30,7 @@ const DEFAULTS = {
   resolution:'keep', width:0, height:0, fps:'keep', deinterlace:false, pix_fmt:'yuv420p', gop:0, tune:'', hw_decode:false,
   acodec:'aac', abitrate:'192k', achannels:'', asamplerate:'', volume:'', loudnorm:'',
   start:'', end:'', subs:'auto', map_all:false, faststart:true, hls_time:6,
-  output_mode:'file', stream_url:'', realtime:true, loop:false, auto_restart:true,
+  qsv_mode:'auto', output_mode:'file', stream_url:'', realtime:true, loop:false, auto_restart:true,
   vfilter:'', afilter:'', extra_args:'', in_args:'', out_dir:'', same_dir:false, suffix:'', overwrite:false,
 };
 const BUILTIN = [
@@ -133,6 +133,7 @@ function updateUI() {
   $('[data-o=fps]').closest('label').style.display = (enc || gif) ? '' : 'none';
   $('[data-o=hls_time]').closest('label').style.display = !stream && opts.container === 'hls' ? '' : 'none';
   $('[data-o=faststart]').closest('label').style.display = !stream && ['mp4','mov','m4a'].includes(opts.container) ? '' : 'none';
+  show('.qsvmode', enc && /_qsv$/.test(opts.vcodec) && opts.hw_decode);
   show('.fileout', !stream);
   show('.streamout', stream);
   if (stream) $('#streamHint').textContent = streamHint(opts.stream_url);

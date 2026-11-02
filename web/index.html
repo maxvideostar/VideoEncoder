@@ -158,6 +158,14 @@
       </label>
       <label class="chk"><input type="checkbox" data-o="deinterlace"> Deîntrețesere (bwdif)</label>
       <label class="chk"><input type="checkbox" data-o="hw_decode"> Decodare hardware</label>
+      <label class="qsvmode">Mod Intel QSV
+        <select data-o="qsv_mode">
+          <option value="auto">Automat (D3D11 → DXVA2 → hibrid)</option>
+          <option value="d3d11">D3D11 (plăci noi)</option>
+          <option value="dxva2">DXVA2 (plăci vechi: HD 500/4600…)</option>
+          <option value="hybrid">Hibrid (filtre pe procesor)</option>
+        </select>
+      </label>
     </div>
    </div>
 
@@ -279,6 +287,9 @@
       <label class="full">Folder ieșire implicit<div class="rowflex"><input name="output_dir"><button class="btn" id="pickOut2">📁</button></div></label>
       <label class="full">Cale ffmpeg.exe (gol = automat)<input name="ffmpeg_path"></label>
       <label class="full">Cale ffprobe.exe (gol = automat)<input name="ffprobe_path"></label>
+      <label class="full">Mod Intel QSV detectat ca funcțional
+        <select name="qsv_mode_ok"><option value="">Nedetectat (se testează la primul job)</option><option value="d3d11">D3D11</option><option value="dxva2">DXVA2</option><option value="hybrid">Hibrid</option></select>
+      </label>
       <label class="chk full"><input type="checkbox" name="low_priority"> Rulează FFmpeg cu prioritate scăzută</label>
       <label class="chk full"><input type="checkbox" name="open_window"> Deschide fereastra la pornire</label>
       <label class="chk full"><input type="checkbox" name="local_no_auth"> Fără parolă pe acest calculator (127.0.0.1)</label>

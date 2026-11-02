@@ -220,7 +220,7 @@ func handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"port": c.Port, "bind": c.Bind, "username": c.Username, "local_no_auth": c.LocalNoAuth,
 		"ffmpeg_path": c.FFmpegPath, "ffprobe_path": c.FFprobePath, "output_dir": c.OutputDir,
 		"max_jobs": c.MaxJobs, "low_priority": c.LowPriority, "open_window": c.OpenWindow,
-		"default_pass": c.DefaultPass,
+		"default_pass": c.DefaultPass, "qsv_mode_ok": c.QSVModeOK,
 	})
 }
 
@@ -237,6 +237,7 @@ func handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		MaxJobs     int     `json:"max_jobs"`
 		LowPriority *bool   `json:"low_priority"`
 		OpenWindow  *bool   `json:"open_window"`
+		QSVModeOK   *string `json:"qsv_mode_ok"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, 400, "cerere invalidă")
@@ -290,6 +291,12 @@ func handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.OpenWindow != nil {
 		cfg.OpenWindow = *req.OpenWindow
+	}
+	if req.QSVModeOK != nil {
+		switch *req.QSVModeOK {
+		case "", "d3d11", "dxva2", "hybrid":
+			cfg.QSVModeOK = *req.QSVModeOK
+		}
 	}
 	saveConfig()
 	cfgMu.Unlock()

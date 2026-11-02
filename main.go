@@ -20,7 +20,7 @@ import (
 )
 
 const AppName = "VideoEncoder"
-const AppVersion = "1.2.1"
+const AppVersion = "1.2.2"
 
 //go:embed web
 var webFS embed.FS
@@ -39,6 +39,7 @@ type Config struct {
 	LowPriority bool   `json:"low_priority"`
 	OpenWindow  bool   `json:"open_window"`
 	DefaultPass bool   `json:"default_pass"`
+	QSVModeOK   string `json:"qsv_mode_ok"` // mod QSV detectat ca funcțional
 }
 
 var (
