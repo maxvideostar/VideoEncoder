@@ -156,7 +156,13 @@
       <label>Tune (x264/x265)
         <select data-o="tune"><option value="">—</option><option>film</option><option>animation</option><option>grain</option><option>fastdecode</option><option>zerolatency</option></select>
       </label>
-      <label class="chk"><input type="checkbox" data-o="deinterlace"> Deîntrețesere (bwdif)</label>
+      <label class="chk"><input type="checkbox" data-o="deinterlace"> Deîntrețesere</label>
+      <label class="deintmode">Mod deîntrețesere
+        <select data-o="deint_mode">
+          <option value="">Calitate (bwdif)</option>
+          <option value="fast">Rapid – un câmp (CPU minim, ideal 1080i→720p)</option>
+        </select>
+      </label>
       <label class="chk"><input type="checkbox" data-o="hw_decode"> Decodare hardware</label>
       <label class="qsvmode">Mod Intel QSV
         <select data-o="qsv_mode">

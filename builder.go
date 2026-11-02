@@ -23,6 +23,7 @@ type EncodeOptions struct {
 	Height      int    `json:"height"`
 	FPS         string `json:"fps"`
 	Deinterlace bool   `json:"deinterlace"`
+	DeintMode   string `json:"deint_mode"` // "" = calitate (bwdif) | fast = un singur câmp (foarte ușor pe CPU)
 	PixFmt      string `json:"pix_fmt"`
 	GOP         int    `json:"gop"`
 	Tune        string `json:"tune"`
@@ -483,16 +484,35 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			}
 			goto audio
 		}
-		if o.Deinterlace {
-			if strings.HasSuffix(vc, "_qsv") {
-				vf = append(vf, "yadif=mode=send_frame:parity=auto:deint=all") // mai rapid pe CPU slab
-			} else {
-				vf = append(vf, "bwdif=mode=send_frame:parity=auto:deint=all")
+		fastDeint := o.Deinterlace && o.DeintMode == "fast"
+		if o.Deinterlace && !fastDeint {
+			// bwdif: calitate mai bună și ~2x mai rapid decât yadif (SIMD)
+			vf = append(vf, "bwdif=mode=send_frame:parity=auto:deint=all")
+		}
+		if fastDeint {
+			// un singur câmp (jumătate din linii) + scalare: de ~7x mai ieftin decât bwdif
+			sf := scaleFlags(vc)
+			vf = append(vf, "field=top")
+			h, err := strconv.Atoi(o.Resolution)
+			switch {
+			case o.Resolution == "custom" && o.Width > 0 && o.Height > 0:
+				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s", o.Width, o.Height, sf))
+			case o.Resolution == "custom" && o.Height > 0:
+				vf = append(vf, fmt.Sprintf("scale=trunc(%d*iw/(2*ih)/2)*2:%d:flags=%s", o.Height, o.Height, sf))
+			case o.Resolution == "custom" && o.Width > 0:
+				vf = append(vf, fmt.Sprintf("scale=%d:trunc(%d*2*ih/iw/2)*2:flags=%s", o.Width, o.Width, sf))
+			case err == nil && h > 0:
+				vf = append(vf, fmt.Sprintf("scale=trunc(%d*iw/(2*ih)/2)*2:%d:flags=%s", h, h, sf))
+			default:
+				vf = append(vf, "scale=iw:ih*2:flags="+sf)
 			}
 		}
 		switch o.Resolution {
 		case "", "keep":
 		case "custom":
+			if fastDeint {
+				break
+			}
 			w, h := o.Width, o.Height
 			if w <= 0 {
 				w = -2
@@ -501,11 +521,11 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 				h = -2
 			}
 			if !(w == -2 && h == -2) {
-				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=lanczos", w, h))
+				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s", w, h, scaleFlags(vc)))
 			}
 		default:
-			if h, err := strconv.Atoi(o.Resolution); err == nil && h > 0 {
-				vf = append(vf, fmt.Sprintf("scale=-2:%d:flags=lanczos", h))
+			if h, err := strconv.Atoi(o.Resolution); err == nil && h > 0 && !fastDeint {
+				vf = append(vf, fmt.Sprintf("scale=-2:%d:flags=%s", h, scaleFlags(vc)))
 			}
 		}
 		if o.Subs == "burn" {
@@ -693,4 +713,13 @@ func hwPixFmt(codec, pf string) string {
 		}
 	}
 	return pf
+}
+
+// scaleFlags: cu encodere hardware procesorul face doar filtrele – folosim scalare ușoară
+// (bilinear e de ~3-4 ori mai rapid decât lanczos, diferența vizuală la 1080→720 e minimă)
+func scaleFlags(codec string) string {
+	if strings.HasSuffix(codec, "_qsv") || strings.HasSuffix(codec, "_nvenc") || strings.HasSuffix(codec, "_amf") {
+		return "bilinear"
+	}
+	return "lanczos"
 }

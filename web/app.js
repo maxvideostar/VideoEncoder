@@ -30,7 +30,7 @@ const DEFAULTS = {
   resolution:'keep', width:0, height:0, fps:'keep', deinterlace:false, pix_fmt:'yuv420p', gop:0, tune:'', hw_decode:false,
   acodec:'aac', abitrate:'192k', achannels:'', asamplerate:'', volume:'', loudnorm:'',
   start:'', end:'', subs:'auto', map_all:false, faststart:true, hls_time:6,
-  qsv_mode:'auto', output_mode:'file', stream_url:'', realtime:true, loop:false, auto_restart:true,
+  qsv_mode:'auto', deint_mode:'', output_mode:'file', stream_url:'', realtime:true, loop:false, auto_restart:true,
   vfilter:'', afilter:'', extra_args:'', in_args:'', out_dir:'', same_dir:false, suffix:'', overwrite:false,
 };
 const BUILTIN = [
@@ -52,7 +52,7 @@ const BUILTIN = [
   { n:'WebM VP9 + Opus', o:{ container:'webm', vcodec:'libvpx-vp9', quality:32, speed:4, acodec:'libopus', abitrate:'128k', faststart:false } },
   { n:'Stream RTMP 720p – 2,5 Mbps (YouTube/Facebook/nginx)', o:{ output_mode:'stream', resolution:'720', fps:'25', rate_mode:'bitrate', vbitrate:'2500k', maxrate:'2500k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'128k', asamplerate:'44100', achannels:'2', faststart:false } },
   { n:'Stream RTMP 1080p – 5 Mbps', o:{ output_mode:'stream', resolution:'1080', fps:'25', rate_mode:'bitrate', vbitrate:'5000k', maxrate:'5000k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'160k', asamplerate:'48000', achannels:'2', faststart:false } },
-  { n:'Stream RTMP – Intel QuickSync 720p (TV 1080i, tot pe GPU)', o:{ output_mode:'stream', vcodec:'h264_qsv', hw_decode:true, deinterlace:true, resolution:'720', fps:'25', rate_mode:'bitrate', vbitrate:'2500k', maxrate:'2500k', gop:50, speed:4, acodec:'aac', abitrate:'128k', asamplerate:'48000', achannels:'2', faststart:false } },
+  { n:'Stream RTMP – Intel QuickSync 720p (TV 1080i, tot pe GPU)', o:{ output_mode:'stream', vcodec:'h264_qsv', hw_decode:true, deinterlace:true, deint_mode:'fast', resolution:'720', fps:'25', rate_mode:'bitrate', vbitrate:'2500k', maxrate:'2500k', gop:50, speed:4, acodec:'aac', abitrate:'128k', asamplerate:'48000', achannels:'2', faststart:false } },
   { n:'Stream RTMP – Intel QuickSync 1080p (TV 1080i, tot pe GPU)', o:{ output_mode:'stream', vcodec:'h264_qsv', hw_decode:true, deinterlace:true, resolution:'keep', fps:'25', rate_mode:'bitrate', vbitrate:'4500k', maxrate:'4500k', gop:50, speed:4, acodec:'aac', abitrate:'160k', asamplerate:'48000', achannels:'2', faststart:false } },
   { n:'Restream (copiere, fără re-encodare)', o:{ output_mode:'stream', vcodec:'copy', acodec:'copy', faststart:false } },
   { n:'Stream MPEG-TS UDP/SRT 1080i25 → 1080p', o:{ output_mode:'stream', deinterlace:true, resolution:'1080', fps:'25', rate_mode:'bitrate', vbitrate:'6000k', maxrate:'6000k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'192k', asamplerate:'48000', faststart:false } },
@@ -114,6 +114,7 @@ function streamHint(u) {
   return 'Protocol: ' + u.split(':')[0] + ' → MPEG-TS';
 }
 
+function useQsvFull() { return /_qsv$/.test(opts.vcodec) && opts.hw_decode && ['d3d11','dxva2'].includes(opts.qsv_mode) && opts.subs !== 'burn' && !opts.vfilter; }
 function updateUI() {
   const stream = opts.output_mode === 'stream';
   const audio = !stream && AUDIO_CONT.includes(opts.container);
@@ -133,6 +134,7 @@ function updateUI() {
   $('[data-o=fps]').closest('label').style.display = (enc || gif) ? '' : 'none';
   $('[data-o=hls_time]').closest('label').style.display = !stream && opts.container === 'hls' ? '' : 'none';
   $('[data-o=faststart]').closest('label').style.display = !stream && ['mp4','mov','m4a'].includes(opts.container) ? '' : 'none';
+  show('.deintmode', enc && opts.deinterlace && !(useQsvFull()));
   show('.qsvmode', enc && /_qsv$/.test(opts.vcodec) && opts.hw_decode);
   show('.fileout', !stream);
   show('.streamout', stream);
