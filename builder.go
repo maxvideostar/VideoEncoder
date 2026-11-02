@@ -48,6 +48,13 @@ type EncodeOptions struct {
 	ExtraArgs string `json:"extra_args"`
 	InArgs    string `json:"in_args"`
 
+	// streaming
+	OutputMode  string `json:"output_mode"` // file | stream
+	StreamURL   string `json:"stream_url"`  // rtmp://… srt://… udp://…
+	Loop        bool   `json:"loop"`        // -stream_loop -1
+	Realtime    bool   `json:"realtime"`    // -re
+	AutoRestart bool   `json:"auto_restart"`
+
 	OutDir    string `json:"out_dir"`
 	SameDir   bool   `json:"same_dir"`
 	Suffix    string `json:"suffix"`
@@ -69,7 +76,35 @@ func containerExt(c string) string {
 }
 
 // OutputPath calculează calea fișierului rezultat
+func (o *EncodeOptions) IsStream() bool { return o.OutputMode == "stream" }
+
+// IsURL – intrare/ieșire de rețea (nu fișier local)
+func IsURL(s string) bool {
+	i := strings.Index(s, "://")
+	return i > 1 && !strings.ContainsAny(s[:i], `\/`)
+}
+
+// streamFormat alege muxer-ul după protocolul URL-ului de ieșire
+func streamFormat(url string) string {
+	u := strings.ToLower(url)
+	switch {
+	case strings.HasPrefix(u, "rtmp://"), strings.HasPrefix(u, "rtmps://"), strings.HasPrefix(u, "rtmpt://"):
+		return "flv"
+	case strings.HasPrefix(u, "rtsp://"), strings.HasPrefix(u, "rtsps://"):
+		return "rtsp"
+	case strings.HasPrefix(u, "http://"), strings.HasPrefix(u, "https://"):
+		if strings.Contains(u, ".m3u8") {
+			return "hls"
+		}
+		return "mpegts"
+	}
+	return "mpegts" // srt, udp, tcp, rtp
+}
+
 func OutputPath(input string, o *EncodeOptions) string {
+	if o.IsStream() {
+		return strings.TrimSpace(o.StreamURL)
+	}
 	dir := o.OutDir
 	if o.SameDir {
 		dir = filepath.Dir(input)
@@ -233,7 +268,8 @@ func filterPath(p string) string {
 // BuildArgs construiește argumentele ffmpeg (fără executabil)
 func BuildArgs(input, output string, o *EncodeOptions) []string {
 	a := []string{"-hide_banner", "-nostdin"}
-	if o.Overwrite {
+	stream := o.IsStream()
+	if o.Overwrite || stream {
 		a = append(a, "-y")
 	} else {
 		a = append(a, "-n")
@@ -246,6 +282,23 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 	if hasStart && start > 0 {
 		a = append(a, "-ss", fmtSec(start))
 	}
+	if stream {
+		if o.Loop && !IsURL(input) {
+			a = append(a, "-stream_loop", "-1")
+		}
+		if o.Realtime && !IsURL(input) {
+			a = append(a, "-re")
+		}
+		if IsURL(input) {
+			l := strings.ToLower(input)
+			if strings.HasPrefix(l, "http") {
+				a = append(a, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5")
+			}
+			if strings.HasPrefix(l, "rtsp") {
+				a = append(a, "-rtsp_transport", "tcp")
+			}
+		}
+	}
 	a = append(a, splitArgs(o.InArgs)...)
 	a = append(a, "-i", input)
 	if hasEnd && end > start {
@@ -255,6 +308,9 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 	cont := o.Container
 	if cont == "" {
 		cont = "mp4"
+	}
+	if stream {
+		cont = "stream"
 	}
 	_, isAudio := audioOnly[cont]
 
@@ -389,7 +445,7 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 				a = append(a, "-c:s", "mov_text")
 			} else if cont == "webm" {
 				a = append(a, "-c:s", "webvtt")
-			} else if cont == "ts" || cont == "hls" {
+			} else if cont == "ts" || cont == "hls" || cont == "stream" {
 				a = append(a, "-sn")
 			} else {
 				a = append(a, "-c:s", "copy")
@@ -413,6 +469,21 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			"-hls_segment_filename", seg)
 	case "ts":
 		a = append(a, "-f", "mpegts")
+	case "stream":
+		f := streamFormat(output)
+		switch f {
+		case "flv":
+			a = append(a, "-f", "flv", "-flvflags", "no_duration_filesize")
+		case "rtsp":
+			a = append(a, "-f", "rtsp", "-rtsp_transport", "tcp")
+		case "hls":
+			a = append(a, "-f", "hls", "-hls_time", "4", "-hls_list_size", "6", "-hls_flags", "delete_segments", "-method", "PUT")
+		default:
+			a = append(a, "-f", "mpegts")
+			if strings.HasPrefix(strings.ToLower(output), "udp://") {
+				a = append(a, "-mpegts_flags", "+resend_headers")
+			}
+		}
 	}
 
 	a = append(a, splitArgs(o.ExtraArgs)...)

@@ -162,3 +162,7 @@ input[type=range]{accent-color:var(--accent);width:100%}
   .fields{grid-template-columns:1fr 1fr}
   .fields .span2{grid-column:1/-1}
 }
+
+.st-pill.live{background:rgba(255,93,93,.15);color:var(--err)}
+.bar.indet i{background:repeating-linear-gradient(90deg,var(--accent) 0 18px,var(--accent2) 18px 36px);background-size:72px 100%;animation:indet 1.2s linear infinite}
+@keyframes indet{from{background-position:0 0}to{background-position:72px 0}}

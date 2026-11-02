@@ -519,13 +519,24 @@ func handleCreateJobs(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "selectează cel puțin un fișier")
 		return
 	}
+	if req.Options.IsStream() {
+		u := strings.TrimSpace(req.Options.StreamURL)
+		if !IsURL(u) {
+			writeErr(w, 400, "introdu URL-ul de ieșire pentru stream (ex: rtmp://server/live/cheie)")
+			return
+		}
+		if len(req.Inputs) > 1 {
+			writeErr(w, 400, "pentru stream selectează o singură sursă (selecția curentă e prima din listă)")
+			return
+		}
+	}
 	var created []*Job
 	for _, in := range req.Inputs {
 		in = strings.Trim(strings.TrimSpace(in), `"`)
 		if in == "" {
 			continue
 		}
-		isURL := strings.Contains(in, "://")
+		isURL := IsURL(in)
 		if !isURL && !fileExists(in) {
 			writeErr(w, 400, "fișier inexistent: "+in)
 			return

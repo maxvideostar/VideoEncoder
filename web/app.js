@@ -30,6 +30,7 @@ const DEFAULTS = {
   resolution:'keep', width:0, height:0, fps:'keep', deinterlace:false, pix_fmt:'yuv420p', gop:0, tune:'', hw_decode:false,
   acodec:'aac', abitrate:'192k', achannels:'', asamplerate:'', volume:'', loudnorm:'',
   start:'', end:'', subs:'auto', map_all:false, faststart:true, hls_time:6,
+  output_mode:'file', stream_url:'', realtime:true, loop:false, auto_restart:true,
   vfilter:'', afilter:'', extra_args:'', in_args:'', out_dir:'', same_dir:false, suffix:'', overwrite:false,
 };
 const BUILTIN = [
@@ -49,6 +50,11 @@ const BUILTIN = [
   { n:'Extrage audio – MP3 320k', o:{ container:'mp3', vcodec:'none', acodec:'libmp3lame', abitrate:'320k' } },
   { n:'Extrage audio – WAV 48 kHz', o:{ container:'wav', vcodec:'none', acodec:'pcm_s16le', asamplerate:'48000' } },
   { n:'WebM VP9 + Opus', o:{ container:'webm', vcodec:'libvpx-vp9', quality:32, speed:4, acodec:'libopus', abitrate:'128k', faststart:false } },
+  { n:'Stream RTMP 720p – 2,5 Mbps (YouTube/Facebook/nginx)', o:{ output_mode:'stream', resolution:'720', fps:'25', rate_mode:'bitrate', vbitrate:'2500k', maxrate:'2500k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'128k', asamplerate:'44100', achannels:'2', faststart:false } },
+  { n:'Stream RTMP 1080p – 5 Mbps', o:{ output_mode:'stream', resolution:'1080', fps:'25', rate_mode:'bitrate', vbitrate:'5000k', maxrate:'5000k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'160k', asamplerate:'48000', achannels:'2', faststart:false } },
+  { n:'Stream RTMP – Intel QuickSync 720p', o:{ output_mode:'stream', vcodec:'h264_qsv', resolution:'720', fps:'25', rate_mode:'bitrate', vbitrate:'2500k', maxrate:'2500k', gop:50, acodec:'aac', abitrate:'128k', achannels:'2', faststart:false } },
+  { n:'Restream (copiere, fără re-encodare)', o:{ output_mode:'stream', vcodec:'copy', acodec:'copy', faststart:false } },
+  { n:'Stream MPEG-TS UDP/SRT 1080i25 → 1080p', o:{ output_mode:'stream', deinterlace:true, resolution:'1080', fps:'25', rate_mode:'bitrate', vbitrate:'6000k', maxrate:'6000k', gop:50, speed:3, tune:'zerolatency', acodec:'aac', abitrate:'192k', asamplerate:'48000', faststart:false } },
   { n:'GIF animat 480px', o:{ container:'gif', fps:'12', resolution:'keep', faststart:false } },
   { n:'ProRes 422 HQ (editare, MOV)', o:{ container:'mov', vcodec:'prores_ks', acodec:'pcm_s16le', pix_fmt:'yuv422p10le', faststart:false } },
   { n:'Deîntrețesere 576i → 576p (H.264)', o:{ deinterlace:true, quality:20, speed:6 } },
@@ -97,9 +103,20 @@ function codecInfo(c) {
   return { lbl:'Calitate', min:0, max:51, hint:'', sp:null };
 }
 
+function streamHint(u) {
+  u = (u || '').toLowerCase();
+  if (!u) return 'Exemple: rtmp://IP/live/cheie · rtmps://live-api-s.facebook.com:443/rtmp/CHEIE · srt://IP:9000?mode=caller · udp://239.1.1.1:1234?pkt_size=1316';
+  if (/^rtmps?:/.test(u)) return 'RTMP → format FLV. Video H.264 (sau copiere dacă sursa e H.264), audio AAC. Recomandat: bitrate constant + GOP = 2 × fps.';
+  if (/^srt:/.test(u)) return 'SRT → MPEG-TS. Adaugă ?mode=caller (trimite) sau ?mode=listener&latency=200000.';
+  if (/^udp:/.test(u)) return 'UDP → MPEG-TS. Pentru multicast adaugă ?pkt_size=1316&ttl=4.';
+  if (/^rtsp:/.test(u)) return 'RTSP (TCP) → necesită un server RTSP (ex. MediaMTX).';
+  return 'Protocol: ' + u.split(':')[0] + ' → MPEG-TS';
+}
+
 function updateUI() {
-  const audio = AUDIO_CONT.includes(opts.container);
-  const gif = opts.container === 'gif';
+  const stream = opts.output_mode === 'stream';
+  const audio = !stream && AUDIO_CONT.includes(opts.container);
+  const gif = !stream && opts.container === 'gif';
   const enc = !audio && !gif && !['copy','none'].includes(opts.vcodec);
   const ci = codecInfo(opts.vcodec);
   const show = (sel, on) => $$(sel).forEach(e => e.style.display = on ? '' : 'none');
@@ -113,8 +130,12 @@ function updateUI() {
   });
   $('[data-o=resolution]').closest('label').style.display = (enc || gif) ? '' : 'none';
   $('[data-o=fps]').closest('label').style.display = (enc || gif) ? '' : 'none';
-  $('[data-o=hls_time]').closest('label').style.display = opts.container === 'hls' ? '' : 'none';
-  $('[data-o=faststart]').closest('label').style.display = ['mp4','mov','m4a'].includes(opts.container) ? '' : 'none';
+  $('[data-o=hls_time]').closest('label').style.display = !stream && opts.container === 'hls' ? '' : 'none';
+  $('[data-o=faststart]').closest('label').style.display = !stream && ['mp4','mov','m4a'].includes(opts.container) ? '' : 'none';
+  show('.fileout', !stream);
+  show('.streamout', stream);
+  if (stream) $('#streamHint').textContent = streamHint(opts.stream_url);
+  $('#enqueueBtn').textContent = stream ? '● Pornește stream-ul' : '＋ Adaugă în coadă';
   $('[data-o=tune]').closest('label').style.display = enc && /^libx26/.test(opts.vcodec) ? '' : 'none';
 
   const q = $('#qRange'); q.min = ci.min; q.max = ci.max; q.value = opts.quality;
@@ -183,7 +204,7 @@ function fillPresetSelect() {
 }
 function applyPreset(val) {
   const [t, ...rest] = val.split(':'); const n = rest.join(':');
-  const keepOut = { out_dir: opts.out_dir, same_dir: opts.same_dir, overwrite: opts.overwrite };
+  const keepOut = { out_dir: opts.out_dir, same_dir: opts.same_dir, overwrite: opts.overwrite, stream_url: opts.stream_url };
   const p = t === 'u' ? userPresets[n] : (BUILTIN.find(x => x.n === n) || {}).o;
   if (!p) return;
   opts = { ...DEFAULTS, ...p, ...(t === 'b' ? keepOut : {}) };
@@ -198,6 +219,7 @@ function describe(o) {
   if (o.fps !== 'keep') parts.push(o.fps + 'fps');
   parts.push(o.acodec === 'copy' ? 'audio copiat' : o.acodec === 'none' ? 'fără audio' : o.acodec + (['flac','pcm_s16le'].includes(o.acodec) ? '' : ' ' + o.abitrate));
   if (o.loudnorm) parts.push('loudnorm ' + o.loudnorm);
+  if (o.output_mode === 'stream') parts[0] = 'STREAM';
   return parts.join(' · ');
 }
 function renderPresetsPage() {
@@ -308,6 +330,7 @@ const STATUS_RO = { queued:'în așteptare', running:'rulează', paused:'pauză'
 function jobCard(j) {
   const p = j.progress || 0;
   const live = j.status === 'running' || j.status === 'paused';
+  const isLive = j.stream && !j.duration;
   const acts = [];
   if (j.status === 'running') acts.push(['pause', '⏸', 'Pauză']);
   if (j.status === 'paused') acts.push(['resume', '▶', 'Continuă']);
@@ -315,23 +338,24 @@ function jobCard(j) {
   if (live || j.status === 'queued') acts.push(['cancel', '■', 'Anulează']);
   if (['done','error','canceled'].includes(j.status)) acts.push(['retry', '↻', 'Reia']);
   let extra = `<button class="btn sm icon" data-log="${j.id}" title="Jurnal">📄</button>`;
-  if (j.status === 'done') {
+  if (j.status === 'done' && !j.stream) {
     extra += `<a class="btn sm" href="/api/jobs/${j.id}/download" title="Descarcă">⬇</a>`;
     if (sys.local) extra += `<button class="btn sm icon" data-reveal="${esc(j.output)}" title="Arată în Explorer">📂</button>`;
   }
   if (!live) extra += `<button class="btn sm icon danger" data-jdel="${j.id}" title="Șterge din listă">🗑</button>`;
   return `<div class="job ${j.status}">
     <div class="top">
-      <span class="st-pill ${j.status}">${STATUS_RO[j.status] || j.status}</span>
+      <span class="st-pill ${j.status}">${STATUS_RO[j.status] || j.status}</span>${j.stream ? '<span class="st-pill live">● LIVE</span>' : ''}
       <div class="title" title="${esc(j.input)}">${esc(baseName(j.input))}</div>
       <div class="acts">${acts.map(a => `<button class="btn sm icon" data-ja="${a[0]}" data-id="${j.id}" title="${a[2]}">${a[1]}</button>`).join('')}${extra}</div>
     </div>
     <div class="sub" title="${esc(j.output)}">→ ${esc(j.output)}${j.preset ? ' · <span class="dim">' + esc(j.preset) + '</span>' : ''}</div>
-    <div class="bar"><i style="width:${j.status === 'queued' ? 0 : p.toFixed(1)}%"></i></div>
+    <div class="bar ${isLive && live ? 'indet' : ''}"><i style="width:${isLive ? (live ? 100 : 0) : j.status === 'queued' ? 0 : p.toFixed(1)}%"></i></div>
     <div class="stats">
-      <span><b>${p.toFixed(1)}%</b></span>
+      ${isLive ? (live ? `<span>în emisie <b>${fmtTime(j.out_time)}</b></span>` : '') : `<span><b>${p.toFixed(1)}%</b></span>`}
+      ${j.restarts ? `<span>reporniri <b>${j.restarts}</b></span>` : ''}
       ${j.duration ? `<span>timp <b>${fmtTime(j.out_time)}</b> / ${fmtTime(j.duration)}</span>` : ''}
-      ${live ? `<span>fps <b>${(j.fps||0).toFixed(0)}</b></span><span>viteză <b>${esc(j.speed || '—')}</b></span><span>rămas <b>${j.eta ? fmtTime(j.eta) : '—'}</b></span>` : ''}
+      ${live && !isLive ? '' : ''}${live ? `<span>fps <b>${(j.fps||0).toFixed(0)}</b></span><span>viteză <b>${esc(j.speed || '—')}</b></span><span>rămas <b>${j.eta ? fmtTime(j.eta) : '—'}</b></span>` : ''}
       ${j.size ? `<span>mărime <b>${fmtSize(j.size)}</b></span>` : ''}
       ${j.bitrate && live ? `<span>bitrate <b>${esc(j.bitrate)}</b></span>` : ''}
       ${j.finished && j.started ? `<span>durată encodare <b>${fmtTime((new Date(j.finished) - new Date(j.started)) / 1000)}</b></span>` : ''}
@@ -554,7 +578,8 @@ function bind() {
     readForm();
     if (!sources.length) return toast('Adaugă cel puțin un fișier sursă', 'e');
     try {
-      const r = await api('/api/jobs', { method:'POST', body:{ inputs: sources, options: opts, preset: currentPreset } });
+      const inputs = opts.output_mode === 'stream' ? [selSrc || sources[0]] : sources;
+      const r = await api('/api/jobs', { method:'POST', body:{ inputs, options: opts, preset: currentPreset } });
       toast(`${r.jobs.length} job(uri) adăugate în coadă`, 'o'); refreshJobs();
     } catch (e) { toast(e.message, 'e'); }
   };

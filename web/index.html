@@ -65,9 +65,28 @@
    </div>
 
    <div class="card">
+    <h3>Destinație</h3>
+    <div class="body fields">
+      <label>Tip ieșire
+        <select data-o="output_mode" id="outMode">
+          <option value="file">Fișier</option>
+          <option value="stream">Stream live (RTMP / SRT / UDP / RTSP)</option>
+        </select>
+      </label>
+      <label class="streamout span2">URL ieșire
+        <input data-o="stream_url" id="streamUrl" placeholder="rtmp://server/live/cheie">
+      </label>
+      <label class="streamout full hint" id="streamHint" style="margin-top:-6px"></label>
+      <label class="chk streamout"><input type="checkbox" data-o="realtime"> Viteză reală (-re)</label>
+      <label class="chk streamout"><input type="checkbox" data-o="loop"> Buclă infinită (fișier)</label>
+      <label class="chk streamout"><input type="checkbox" data-o="auto_restart"> Repornire automată la eroare</label>
+    </div>
+   </div>
+
+   <div class="card">
     <h3>Video</h3>
     <div class="body fields">
-      <label>Container / format
+      <label class="fileout">Container / format
         <select data-o="container">
           <optgroup label="Video">
             <option value="mp4">MP4</option><option value="mkv">MKV</option><option value="mov">MOV</option>
@@ -172,7 +191,7 @@
    </div>
 
    <div class="card">
-    <h3>Tăiere, subtitrări, ieșire</h3>
+    <h3>Tăiere, subtitrări, fișier ieșire</h3>
     <div class="body fields">
       <label>Început<input data-o="start" placeholder="00:00:00"></label>
       <label>Sfârșit<input data-o="end" placeholder="00:00:00 (gol = până la final)"></label>
@@ -183,12 +202,12 @@
       <label>Segment HLS (sec)<input type="number" data-o="hls_time" data-num></label>
       <label class="chk"><input type="checkbox" data-o="map_all"> Toate pistele (audio/sub)</label>
       <label class="chk"><input type="checkbox" data-o="faststart"> Fast start (web)</label>
-      <label class="full">Folder ieșire
+      <label class="full fileout">Folder ieșire
         <div class="rowflex"><input data-o="out_dir" id="outDir" placeholder="implicit (din Setări)"><button class="btn" id="pickOut">📁</button></div>
       </label>
-      <label class="chk"><input type="checkbox" data-o="same_dir"> Lângă fișierul sursă</label>
-      <label>Sufix nume<input data-o="suffix" placeholder="ex: _720p"></label>
-      <label class="chk"><input type="checkbox" data-o="overwrite"> Suprascrie dacă există</label>
+      <label class="chk fileout"><input type="checkbox" data-o="same_dir"> Lângă fișierul sursă</label>
+      <label class="fileout">Sufix nume<input data-o="suffix" placeholder="ex: _720p"></label>
+      <label class="chk fileout"><input type="checkbox" data-o="overwrite"> Suprascrie dacă există</label>
     </div>
    </div>
 

@@ -37,6 +37,8 @@ type Job struct {
 	Started  *time.Time     `json:"started,omitempty"`
 	Finished *time.Time     `json:"finished,omitempty"`
 	Log      []string       `json:"log,omitempty"`
+	Stream   bool           `json:"stream"`
+	Restarts int            `json:"restarts"`
 
 	cmd      *exec.Cmd
 	canceled bool
@@ -94,12 +96,22 @@ func (m *JobManager) loop() {
 func (m *JobManager) schedule() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// stream-urile pornesc imediat, nu ocupă locuri în coadă
+	for _, id := range m.order {
+		j := m.jobs[id]
+		if j != nil && j.Status == "queued" && j.Stream {
+			j.Status = "running"
+			now := time.Now()
+			j.Started = &now
+			go m.run(j)
+		}
+	}
 	if m.paused {
 		return
 	}
 	running := 0
 	for _, j := range m.jobs {
-		if j.Status == "running" || j.Status == "paused" {
+		if (j.Status == "running" || j.Status == "paused") && !j.Stream {
 			running++
 		}
 	}
@@ -109,7 +121,7 @@ func (m *JobManager) schedule() {
 			break
 		}
 		j := m.jobs[id]
-		if j != nil && j.Status == "queued" {
+		if j != nil && j.Status == "queued" && !j.Stream {
 			running++
 			j.Status = "running"
 			now := time.Now()
@@ -130,7 +142,7 @@ func (m *JobManager) Add(input string, o *EncodeOptions, preset string) *Job {
 	m.mu.Lock()
 	// evită două joburi cu aceeași ieșire în coadă
 	for _, other := range m.jobs {
-		if (other.Status == "queued" || other.Status == "running") && samePath(other.Output, out) && !opts.Overwrite {
+		if !opts.IsStream() && (other.Status == "queued" || other.Status == "running") && samePath(other.Output, out) && !opts.Overwrite {
 			ext := filepath.Ext(out)
 			out = strings.TrimSuffix(out, ext) + "_" + id[len(id)-4:] + ext
 		}
@@ -138,7 +150,7 @@ func (m *JobManager) Add(input string, o *EncodeOptions, preset string) *Job {
 	args := BuildArgs(input, out, &opts)
 	j := &Job{
 		ID: id, Input: input, Output: out, Options: &opts, Preset: preset, Args: args,
-		Cmd: CommandString(ffmpegExe(), args), Status: "queued", Created: time.Now(),
+		Cmd: CommandString(ffmpegExe(), args), Status: "queued", Created: time.Now(), Stream: opts.IsStream(),
 	}
 	m.jobs[id] = j
 	m.order = append(m.order, id)
@@ -164,8 +176,11 @@ func (m *JobManager) run(j *Job) {
 	exe := ffmpegExe()
 
 	// durata (pentru progres)
-	dur := probeDuration(j.Input)
 	o := j.Options
+	dur := 0.0
+	if !(o.IsStream() && (o.Loop || IsURL(j.Input))) && !IsURL(j.Input) {
+		dur = probeDuration(j.Input)
+	}
 	st, hasS := ParseTime(o.Start)
 	en, hasE := ParseTime(o.End)
 	if hasE && en > st {
@@ -174,7 +189,9 @@ func (m *JobManager) run(j *Job) {
 		dur -= st
 	}
 
-	os.MkdirAll(filepath.Dir(j.Output), 0755)
+	if !j.Stream {
+		os.MkdirAll(filepath.Dir(j.Output), 0755)
+	}
 
 	args := append([]string{}, j.Args...)
 	// inserăm -progress înainte de ieșire
@@ -284,8 +301,22 @@ func (m *JobManager) finish(j *Job, err error) {
 	case err != nil:
 		j.Status = "error"
 		msg := err.Error()
-		// ultima linie relevantă din log
-		for i := len(j.Log) - 1; i >= 0; i-- {
+		// ultima linie relevantă din log: întâi una care chiar descrie o eroare
+		found := false
+		for i := len(j.Log) - 1; i >= 0 && !found; i-- {
+			l := strings.ToLower(j.Log[i])
+			if strings.HasPrefix(l, "> ") {
+				break
+			}
+			for _, k := range []string{"error", "failed", "refused", "broken pipe", "invalid", "not found", "denied", "timed out", "unable", "cannot", "no such", "unknown"} {
+				if strings.Contains(l, k) && !strings.HasPrefix(l, "conversion failed") {
+					msg = j.Log[i]
+					found = true
+					break
+				}
+			}
+		}
+		for i := len(j.Log) - 1; i >= 0 && !found; i-- {
 			l := j.Log[i]
 			if !strings.HasPrefix(l, "> ") && strings.TrimSpace(l) != "" && !strings.HasPrefix(l, "Exiting") && !strings.HasPrefix(l, "Conversion failed") {
 				msg = l
@@ -311,6 +342,27 @@ func (m *JobManager) finish(j *Job, err error) {
 		}
 	}
 	log.Printf("job %s: %s %s", j.ID, j.Status, j.Error)
+	// repornire automată pentru stream-uri (eroare sau sursa live s-a terminat)
+	if j.Stream && j.Options.AutoRestart && !j.canceled && (j.Status == "error" || IsURL(j.Input) || j.Options.Loop) {
+		id := j.ID
+		j.Status = "error"
+		why := j.Error
+		if why == "" {
+			why = "sursa s-a terminat"
+		}
+		j.Error = "repornire automată în 5 secunde… (" + why + ")"
+		go func() {
+			time.Sleep(5 * time.Second)
+			m.mu.Lock()
+			jj := m.jobs[id]
+			if jj != nil && jj.Status == "error" && !jj.canceled && strings.HasPrefix(jj.Error, "repornire automată") {
+				jj.Status, jj.Error, jj.Progress, jj.OutTime, jj.Size, jj.Finished = "queued", "", 0, 0, 0, nil
+				jj.Restarts++
+			}
+			m.mu.Unlock()
+			m.kick()
+		}()
+	}
 	m.mu.Unlock()
 	m.saveSoon()
 	m.kick()
@@ -325,7 +377,11 @@ func (m *JobManager) Action(id, action string) error {
 	}
 	switch action {
 	case "cancel":
-		if j.Status == "queued" {
+		if j.Status == "error" && j.Stream {
+			j.canceled = true
+			j.Status = "canceled"
+			j.Error = ""
+		} else if j.Status == "queued" {
 			j.Status = "canceled"
 		} else if (j.Status == "running" || j.Status == "paused") && j.cmd != nil && j.cmd.Process != nil {
 			j.canceled = true

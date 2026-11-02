@@ -12,6 +12,7 @@ Un singur fișier `VideoEncoder.exe`, fără instalare, fără dependențe.
 - **Progres live** – procent, fps, viteză, timp rămas, mărime, bitrate, jurnal FFmpeg complet
 - **Encodere CPU**: H.264 (x264), H.265 (x265), AV1 (SVT-AV1), VP9, ProRes 422 HQ, MPEG-2
 - **Encodere hardware** (detectate și testate automat): NVIDIA NVENC, Intel QuickSync, AMD AMF – H.264 / HEVC / AV1
+- **Streaming live**: RTMP/RTMPS (YouTube, Facebook, nginx-rtmp), SRT, UDP/multicast, RTSP – cu buclă, viteză reală și repornire automată
 - **Containere**: MP4, MKV, MOV, TS, WebM, **HLS (m3u8)**, GIF animat, doar audio (MP3, AAC, M4A, FLAC, WAV, Opus)
 - Rezoluție, fps, deîntrețesere (bwdif), format pixel, GOP, tune, decodare HW
 - Audio: codec, bitrate, canale, frecvență, volum, **normalizare loudness EBU R128 (−23 LUFS)** / −16 / −14
@@ -39,6 +40,25 @@ Un singur fișier `VideoEncoder.exe`, fără instalare, fără dependențe.
 - Din internet: redirecționează portul **8090 TCP** din router către PC → `http://IP-public:8090/`
 - Rulează `firewall-allow.bat` ca Administrator ca să deschizi portul în Windows Firewall (sau acceptă promptul Windows la prima pornire).
 - Recomandat pentru internet: pune-l în spatele unui reverse proxy cu HTTPS (nginx). Cererile venite prin proxy (`X-Forwarded-For`) sunt tratate mereu ca externe și cer parolă.
+
+## Streaming (RTMP / SRT / UDP / RTSP)
+
+1. Encodare → **Destinație → Tip ieșire: Stream live**
+2. **URL ieșire**, de exemplu:
+   - `rtmp://IP-server/live/cheie` (nginx-rtmp, YouTube: `rtmp://a.rtmp.youtube.com/live2/CHEIE`)
+   - `rtmps://live-api-s.facebook.com:443/rtmp/CHEIE`
+   - `srt://IP:9000?mode=caller`
+   - `udp://239.1.1.1:1234?pkt_size=1316&ttl=4`
+   - `rtsp://IP:8554/canal` (necesită server RTSP, ex. MediaMTX)
+3. Sursa: un fișier (cu **Buclă infinită** pentru emisie continuă) sau un URL live (udp, http, rtmp, srt – restream)
+4. **● Pornește stream-ul** – apare în Coadă cu eticheta LIVE; se oprește cu ■
+
+Opțiuni:
+- **Viteză reală (-re)** – obligatoriu când sursa e fișier (altfel ffmpeg trimite cât de repede poate)
+- **Repornire automată** – dacă serverul cade sau sursa live se întrerupe, repornește după 5 s (numărul de reporniri apare în coadă)
+- Stream-urile nu ocupă locuri în coadă și pornesc imediat, chiar dacă coada e oprită
+- Formatul se alege după protocol: RTMP → FLV, SRT/UDP → MPEG-TS, RTSP → RTSP/TCP
+- Presetări incluse: *Stream RTMP 720p 2,5 Mbps*, *Stream RTMP 1080p 5 Mbps*, *Stream RTMP – Intel QuickSync*, *Restream (copiere)*, *Stream MPEG-TS UDP/SRT 1080i→1080p*
 
 ## Serviciu Windows
 
