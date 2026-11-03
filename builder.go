@@ -24,6 +24,8 @@ type EncodeOptions struct {
 	Height      int    `json:"height"`
 	FPS         string `json:"fps"`
 	Deinterlace bool   `json:"deinterlace"`
+	Aspect      string `json:"aspect"`     // "" = din sursă | 16:9 | 4:3 (corectează surse marcate greșit)
+	PixelMode   string `json:"pixel_mode"` // "" = ca sursa (rezoluție păstrată) | square = pixeli pătrați (720x576 16:9 -> 1024x576)
 	DeintMode   string `json:"deint_mode"` // "" = calitate (bwdif) | fast = un singur câmp (foarte ușor pe CPU)
 	PixFmt      string `json:"pix_fmt"`
 	GOP         int    `json:"gop"`
@@ -480,8 +482,14 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			if strings.Contains(o.PixFmt, "10") {
 				vpp = append(vpp, "format=p010")
 			}
+			if af := aspectFilter(o.Aspect); af != "" && len(vpp) == 0 {
+				a = append(a, "-vf", af)
+			}
 			if len(vpp) > 0 {
 				f := "vpp_qsv=" + strings.Join(vpp, ":")
+				if af := aspectFilter(o.Aspect); af != "" {
+					f = af + "," + f
+				}
 				if o.Resolution != "" && o.Resolution != "keep" {
 					f += ",setsar=1" // lățimea e calculată din DAR -> pixeli pătrați
 				}
@@ -496,6 +504,10 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			goto audio
 		}
 		fastDeint := o.Deinterlace && o.DeintMode == "fast"
+		square := o.PixelMode == "square"
+		if f := aspectFilter(o.Aspect); f != "" {
+			vf = append(vf, f) // întâi corectăm raportul declarat de sursă
+		}
 		if o.Deinterlace && !fastDeint {
 			// bwdif: calitate mai bună și ~2x mai rapid decât yadif (SIMD)
 			vf = append(vf, "bwdif=mode=send_frame:parity=auto:deint=all")
@@ -510,21 +522,20 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			case o.Resolution == "custom" && o.Width > 0 && o.Height > 0:
 				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s,setsar=1", o.Width, o.Height, sf))
 			case o.Resolution == "custom" && o.Height > 0:
-				vf = append(vf, squareScale(strconv.Itoa(o.Height), true, sf))
+				vf = append(vf, fieldScale(strconv.Itoa(o.Height), square, sf))
 			case o.Resolution == "custom" && o.Width > 0:
 				vf = append(vf, fmt.Sprintf("scale=%d:trunc(%d/dar)*2:flags=%s,setsar=1", o.Width, o.Width, sf))
 			case err == nil && h > 0:
-				vf = append(vf, squareScale(strconv.Itoa(h), true, sf))
+				vf = append(vf, fieldScale(strconv.Itoa(h), square, sf))
 			default:
-				vf = append(vf, squareScale("ih*2", true, sf))
+				vf = append(vf, fieldScale("ih*2", square, sf))
 			}
 		}
 		sf := scaleFlags(vc)
 		switch o.Resolution {
 		case "", "keep":
-			// stream / encodere hardware: pixeli pătrați (SD 16:9 anamorfic 720x576 -> 1024x576),
-			// multe playere RTMP/web ignoră SAR și ar afișa 4:3
-			if !fastDeint && (stream || isHWEnc(vc)) {
+			// rezoluția sursei se păstrează; doar la cerere pixeli pătrați (SD 16:9 720x576 -> 1024x576)
+			if !fastDeint && square {
 				vf = append(vf, squareScale("ih", false, sf))
 			}
 		case "custom":
@@ -534,14 +545,20 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			switch {
 			case o.Width > 0 && o.Height > 0:
 				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s,setsar=1", o.Width, o.Height, sf))
-			case o.Height > 0:
+			case o.Height > 0 && square:
 				vf = append(vf, squareScale(strconv.Itoa(o.Height), false, sf))
+			case o.Height > 0:
+				vf = append(vf, fmt.Sprintf("scale=-2:%d:flags=%s", o.Height, sf))
 			case o.Width > 0:
 				vf = append(vf, fmt.Sprintf("scale=%d:trunc(%d/dar/2)*2:flags=%s,setsar=1", o.Width, o.Width, sf))
 			}
 		default:
 			if h, err := strconv.Atoi(o.Resolution); err == nil && h > 0 && !fastDeint {
-				vf = append(vf, squareScale(strconv.Itoa(h), false, sf))
+				if square {
+					vf = append(vf, squareScale(strconv.Itoa(h), false, sf))
+				} else {
+					vf = append(vf, fmt.Sprintf("scale=-2:%d:flags=%s", h, sf)) // păstrează forma pixelilor sursei
+				}
 			}
 		}
 		if o.Subs == "burn" {
@@ -819,4 +836,27 @@ func squareScale(h string, field bool, flags string) string {
 		div = "4"
 	}
 	return fmt.Sprintf("scale=trunc(%s*dar/%s)*2:%s:flags=%s,setsar=1", h, div, h, flags)
+}
+
+// aspectFilter forțează raportul de afișare (sursă marcată greșit, ex. 16:9 transmis ca 4:3)
+func aspectFilter(a string) string {
+	switch a {
+	case "16:9":
+		return "setdar=16/9"
+	case "4:3":
+		return "setdar=4/3"
+	}
+	return ""
+}
+
+// fieldScale – scalare după filtrul field (jumătate din linii)
+func fieldScale(h string, square bool, flags string) string {
+	if square {
+		return squareScale(h, true, flags)
+	}
+	// păstrează forma pixelilor sursei: lățimea din geometria pixelilor, SAR readus la valoarea sursei
+	if h == "ih*2" {
+		return "scale=iw:ih*2:flags=" + flags + ",setsar=sar/2"
+	}
+	return fmt.Sprintf("scale=trunc(%s*iw/(2*ih)/2)*2:%s:flags=%s,setsar=sar/2", h, h, flags)
 }

@@ -145,6 +145,13 @@
       </label>
       <label class="custres">Lățime<input type="number" data-o="width" data-num placeholder="auto"></label>
       <label class="custres">Înălțime<input type="number" data-o="height" data-num placeholder="auto"></label>
+      <label>Raport imagine sursă
+        <select data-o="aspect"><option value="">Din sursă</option><option value="16:9">Forțează 16:9</option><option value="4:3">Forțează 4:3</option></select>
+        <span class="hint">„Forțează 16:9” dacă postul e 16:9 dar iese turtit / 4:3</span>
+      </label>
+      <label>Pixeli ieșire
+        <select data-o="pixel_mode"><option value="">Ca sursa (păstrează rezoluția)</option><option value="square">Pătrați (SD 16:9 → 1024×576)</option></select>
+      </label>
       <label>Cadre / sec
         <select data-o="fps"><option value="keep">Originale</option><option>23.976</option><option>24</option><option>25</option>
           <option>29.97</option><option>30</option><option>50</option><option>59.94</option><option>60</option><option>12</option><option>15</option></select>

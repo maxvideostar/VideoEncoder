@@ -30,7 +30,7 @@ const DEFAULTS = {
   resolution:'keep', width:0, height:0, fps:'keep', deinterlace:false, pix_fmt:'yuv420p', gop:0, tune:'', hw_decode:false,
   acodec:'aac', abitrate:'192k', achannels:'', asamplerate:'', volume:'', loudnorm:'',
   start:'', end:'', subs:'auto', map_all:false, faststart:true, hls_time:6,
-  qsv_mode:'auto', deint_mode:'', output_mode:'file', stream_url:'', realtime:true, loop:false, auto_restart:true,
+  qsv_mode:'auto', deint_mode:'', aspect:'', pixel_mode:'', output_mode:'file', stream_url:'', realtime:true, loop:false, auto_restart:true,
   vfilter:'', afilter:'', extra_args:'', in_args:'', out_dir:'', same_dir:false, suffix:'', overwrite:false,
 };
 const BUILTIN = [
@@ -131,7 +131,7 @@ function updateUI() {
   show('.vq', enc && opts.rate_mode === 'quality');
   show('.vb', enc && opts.rate_mode === 'bitrate');
   show('.custres', (enc || gif) && opts.resolution === 'custom');
-  $$('#page-encode [data-o=rate_mode],[data-o=speed],[data-o=pix_fmt],[data-o=gop],[data-o=tune],[data-o=deinterlace]').forEach(e => {
+  $$('#page-encode [data-o=rate_mode],[data-o=speed],[data-o=pix_fmt],[data-o=gop],[data-o=tune],[data-o=deinterlace],[data-o=aspect],[data-o=pixel_mode]').forEach(e => {
     const lab = e.closest('label'); if (lab) lab.style.display = enc ? '' : 'none';
   });
   $('[data-o=resolution]').closest('label').style.display = (enc || gif) ? '' : 'none';
