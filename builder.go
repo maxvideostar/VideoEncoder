@@ -468,20 +468,24 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 				case o.Width > 0 && o.Height > 0:
 					vpp = append(vpp, fmt.Sprintf("w=%d:h=%d", o.Width, o.Height))
 				case o.Height > 0:
-					vpp = append(vpp, fmt.Sprintf("w=trunc(%d*iw/ih/2)*2:h=%d", o.Height, o.Height))
+					vpp = append(vpp, fmt.Sprintf("w=trunc(%d*dar/2)*2:h=%d", o.Height, o.Height))
 				case o.Width > 0:
-					vpp = append(vpp, fmt.Sprintf("w=%d:h=trunc(%d*ih/iw/2)*2", o.Width, o.Width))
+					vpp = append(vpp, fmt.Sprintf("w=%d:h=trunc(%d/dar/2)*2", o.Width, o.Width))
 				}
 			default:
 				if h, err := strconv.Atoi(o.Resolution); err == nil && h > 0 {
-					vpp = append(vpp, fmt.Sprintf("w=trunc(%d*iw/ih/2)*2:h=%d", h, h))
+					vpp = append(vpp, fmt.Sprintf("w=trunc(%d*dar/2)*2:h=%d", h, h))
 				}
 			}
 			if strings.Contains(o.PixFmt, "10") {
 				vpp = append(vpp, "format=p010")
 			}
 			if len(vpp) > 0 {
-				a = append(a, "-vf", "vpp_qsv="+strings.Join(vpp, ":"))
+				f := "vpp_qsv=" + strings.Join(vpp, ":")
+				if o.Resolution != "" && o.Resolution != "keep" {
+					f += ",setsar=1" // lățimea e calculată din DAR -> pixeli pătrați
+				}
+				a = append(a, "-vf", f)
 			}
 			if o.FPS != "" && o.FPS != "keep" {
 				a = append(a, "-r", o.FPS)
@@ -502,37 +506,42 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 			vf = append(vf, "field=top")
 			h, err := strconv.Atoi(o.Resolution)
 			switch {
+			// după field, "dar" e dublu față de imaginea reală (jumătate din linii) -> împărțim la 2
 			case o.Resolution == "custom" && o.Width > 0 && o.Height > 0:
 				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s,setsar=1", o.Width, o.Height, sf))
 			case o.Resolution == "custom" && o.Height > 0:
-				vf = append(vf, fmt.Sprintf("scale=trunc(%d*iw/(2*ih)/2)*2:%d:flags=%s,setsar=1", o.Height, o.Height, sf))
+				vf = append(vf, squareScale(strconv.Itoa(o.Height), true, sf))
 			case o.Resolution == "custom" && o.Width > 0:
-				vf = append(vf, fmt.Sprintf("scale=%d:trunc(%d*2*ih/iw/2)*2:flags=%s,setsar=1", o.Width, o.Width, sf))
+				vf = append(vf, fmt.Sprintf("scale=%d:trunc(%d/dar)*2:flags=%s,setsar=1", o.Width, o.Width, sf))
 			case err == nil && h > 0:
-				vf = append(vf, fmt.Sprintf("scale=trunc(%d*iw/(2*ih)/2)*2:%d:flags=%s,setsar=1", h, h, sf))
+				vf = append(vf, squareScale(strconv.Itoa(h), true, sf))
 			default:
-				vf = append(vf, "scale=iw:ih*2:flags="+sf+",setsar=1")
+				vf = append(vf, squareScale("ih*2", true, sf))
 			}
 		}
+		sf := scaleFlags(vc)
 		switch o.Resolution {
 		case "", "keep":
+			// stream / encodere hardware: pixeli pătrați (SD 16:9 anamorfic 720x576 -> 1024x576),
+			// multe playere RTMP/web ignoră SAR și ar afișa 4:3
+			if !fastDeint && (stream || isHWEnc(vc)) {
+				vf = append(vf, squareScale("ih", false, sf))
+			}
 		case "custom":
 			if fastDeint {
 				break
 			}
-			w, h := o.Width, o.Height
-			if w <= 0 {
-				w = -2
-			}
-			if h <= 0 {
-				h = -2
-			}
-			if !(w == -2 && h == -2) {
-				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s", w, h, scaleFlags(vc)))
+			switch {
+			case o.Width > 0 && o.Height > 0:
+				vf = append(vf, fmt.Sprintf("scale=%d:%d:flags=%s,setsar=1", o.Width, o.Height, sf))
+			case o.Height > 0:
+				vf = append(vf, squareScale(strconv.Itoa(o.Height), false, sf))
+			case o.Width > 0:
+				vf = append(vf, fmt.Sprintf("scale=%d:trunc(%d/dar/2)*2:flags=%s,setsar=1", o.Width, o.Width, sf))
 			}
 		default:
 			if h, err := strconv.Atoi(o.Resolution); err == nil && h > 0 && !fastDeint {
-				vf = append(vf, fmt.Sprintf("scale=-2:%d:flags=%s", h, scaleFlags(vc)))
+				vf = append(vf, squareScale(strconv.Itoa(h), false, sf))
 			}
 		}
 		if o.Subs == "burn" {
@@ -796,4 +805,18 @@ func urlBaseName(u string) string {
 		return "stream"
 	}
 	return b.String()
+}
+
+func isHWEnc(c string) bool {
+	return strings.HasSuffix(c, "_qsv") || strings.HasSuffix(c, "_nvenc") || strings.HasSuffix(c, "_amf")
+}
+
+// squareScale scalează la înălțimea h păstrând raportul de afișare (DAR, ține cont de SAR),
+// cu pixeli pătrați. field=true: intrarea are doar jumătate din linii (după filtrul field).
+func squareScale(h string, field bool, flags string) string {
+	div := "2"
+	if field {
+		div = "4"
+	}
+	return fmt.Sprintf("scale=trunc(%s*dar/%s)*2:%s:flags=%s,setsar=1", h, div, h, flags)
 }
