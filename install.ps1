@@ -272,7 +272,10 @@ Step "5. Firewall Windows"
 Ok "portul $Port deschis"
 # ffmpeg trebuie sa primeasca UDP multicast / RTP / SRT
 & netsh advfirewall firewall delete rule name="VideoEncoder FFmpeg" 2>$null | Out-Null
-foreach ($f in Get-ChildItem $Dir -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue) {
+foreach ($f in Get-ChildItem $Dir -Recurse -Include "ffmpeg.exe", "ffprobe.exe" -ErrorAction SilentlyContinue) {
+    # regulile de BLOCARE create de Windows (prompt anulat) au prioritate - le stergem
+    Get-NetFirewallApplicationFilter -Program $f.FullName -ErrorAction SilentlyContinue | Get-NetFirewallRule -ErrorAction SilentlyContinue |
+        Where-Object { $_.Action -eq "Block" } | Remove-NetFirewallRule -ErrorAction SilentlyContinue
     & netsh advfirewall firewall add rule name="VideoEncoder FFmpeg" dir=in action=allow program="$($f.FullName)" enable=yes profile=any | Out-Null
 }
 Ok "ffmpeg poate primi multicast (UDP)"

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -97,14 +98,33 @@ func ensureFFmpegFirewall(ff string) {
 	if !filepath.IsAbs(ff) {
 		return
 	}
-	run := func(args ...string) error {
-		c := exec.Command("netsh", args...)
+	run := func(name string, args ...string) error {
+		c := exec.Command(name, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 		return c.Run()
 	}
-	run("advfirewall", "firewall", "delete", "rule", "name=VideoEncoder FFmpeg")
-	if err := run("advfirewall", "firewall", "add", "rule", "name=VideoEncoder FFmpeg", "dir=in", "action=allow",
-		"program="+ff, "enable=yes", "profile=any"); err == nil {
-		log.Printf("firewall: trafic de intrare permis pentru %s", ff)
+	progs := []string{ff, filepath.Join(filepath.Dir(ff), "ffprobe.exe")}
+	// Windows creează reguli de BLOCARE dacă promptul firewall a fost închis / anulat;
+	// blocarea are prioritate față de permisiune -> le ștergem
+	for _, p := range progs {
+		ps := "Get-NetFirewallApplicationFilter -Program '" + strings.ReplaceAll(p, "'", "''") + "' -ErrorAction SilentlyContinue | " +
+			"Get-NetFirewallRule | Where-Object { $_.Action -eq 'Block' } | Remove-NetFirewallRule"
+		run("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps)
+	}
+	run("netsh", "advfirewall", "firewall", "delete", "rule", "name=VideoEncoder FFmpeg")
+	ok := true
+	for _, p := range progs {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		if err := run("netsh", "advfirewall", "firewall", "add", "rule", "name=VideoEncoder FFmpeg", "dir=in", "action=allow",
+			"program="+p, "enable=yes", "profile=any"); err != nil {
+			ok = false
+		}
+	}
+	if ok {
+		log.Printf("firewall: trafic de intrare permis pentru %s (+ffprobe)", ff)
+	} else {
+		log.Printf("firewall: nu pot adăuga regula (rulează ca serviciu sau administrator)")
 	}
 }

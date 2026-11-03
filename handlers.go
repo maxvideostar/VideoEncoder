@@ -483,7 +483,13 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 func handleProbe(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Query().Get("path")
-	out, stderr, err := runSplit(30*time.Second, ffprobeExe(), "-v", "error", "-print_format", "json", "-show_format", "-show_streams", p)
+	args := []string{"-v", "error", "-print_format", "json", "-show_format", "-show_streams"}
+	if IsURL(p) {
+		args = append(args, "-analyzeduration", "5000000", "-probesize", "5000000")
+		p = UDPInput(p) // multicast: aceeași placă de rețea + buffer + timeout ca la encodare
+	}
+	args = append(args, p)
+	out, stderr, err := runSplit(20*time.Second, ffprobeExe(), args...)
 	if !json.Valid(out) || !bytes.Contains(out, []byte(`"format"`)) {
 		msg := strings.TrimSpace(string(stderr))
 		if lines := strings.Split(msg, "\n"); len(lines) > 3 {
@@ -491,6 +497,9 @@ func handleProbe(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			msg += " (" + err.Error() + ")"
+		}
+		if strings.HasPrefix(strings.ToLower(p), "udp://") || strings.HasPrefix(strings.ToLower(p), "rtp://") {
+			msg += " — multicast: verifică Setări → Placa de rețea pentru multicast, firewall-ul și dacă sursa e activă (comanda: " + p + ")"
 		}
 		writeErr(w, 400, "ffprobe: "+msg)
 		return
