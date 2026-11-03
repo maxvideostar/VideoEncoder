@@ -497,6 +497,9 @@ async function loadSystem() {
 async function loadSettings() {
   try {
     const s = await api('/api/settings');
+    const mi = $('#mcastIface');
+    mi.innerHTML = '<option value="">Automat (placa implicită)</option>' + (s.ifaces || []).map(i => `<option value="${esc(i.ip)}">${esc(i.ip)} — ${esc(i.name)}</option>`).join('');
+    if (s.mcast_iface && !(s.ifaces || []).some(i => i.ip === s.mcast_iface)) mi.innerHTML += `<option value="${esc(s.mcast_iface)}">${esc(s.mcast_iface)} (indisponibilă acum)</option>`;
     $$('#settingsForm [name]').forEach(el => {
       const v = s[el.name];
       if (el.type === 'checkbox') el.checked = !!v; else if (el.name !== 'new_password') el.value = v ?? '';

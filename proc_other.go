@@ -27,3 +27,5 @@ func openWindow(url string) {
 func revealFile(p string) {
 	exec.Command("xdg-open", p).Start()
 }
+
+func ensureFFmpegFirewall(ff string) {}

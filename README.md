@@ -70,6 +70,14 @@ Dezinstalare: `Uninstall-VideoEncoder.bat` sau din *Aplicații instalate*.
 - Rulează `firewall-allow.bat` ca Administrator ca să deschizi portul în Windows Firewall (sau acceptă promptul Windows la prima pornire).
 - Recomandat pentru internet: pune-l în spatele unui reverse proxy cu HTTPS (nginx). Cererile venite prin proxy (`X-Forwarded-For`) sunt tratate mereu ca externe și cer parolă.
 
+## Surse multicast (udp://239.x.x.x)
+
+- Sursa se scrie `udp://239.1.1.1:1234` sau `udp://@239.1.1.1:1234` (stil VLC)
+- **Setări → Placa de rețea pentru multicast**: alege placa pe care vine multicastul (ca interfața din udpxy) – necesar când PC-ul are mai multe plăci de rețea
+- Aplicația adaugă automat buffer mare (`fifo_size`, `buffer_size`), `overrun_nonfatal` și timeout 10 s (dacă multicastul se oprește, stream-ul repornește singur)
+- Regula de firewall pentru `ffmpeg.exe` (UDP de intrare) se creează automat de serviciu și de installer
+- Alternativ, prin udpxy: `http://127.0.0.1:PORT/udp/239.1.1.1:1234`
+
 ## Streaming (RTMP / SRT / UDP / RTSP)
 
 1. Encodare → **Destinație → Tip ieșire: Stream live**

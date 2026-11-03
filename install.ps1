@@ -270,6 +270,12 @@ Step "5. Firewall Windows"
 & netsh advfirewall firewall add rule name="VideoEncoder" dir=in action=allow protocol=TCP localport=$Port | Out-Null
 & netsh advfirewall firewall add rule name="VideoEncoder" dir=in action=allow program="$Exe" enable=yes | Out-Null
 Ok "portul $Port deschis"
+# ffmpeg trebuie sa primeasca UDP multicast / RTP / SRT
+& netsh advfirewall firewall delete rule name="VideoEncoder FFmpeg" 2>$null | Out-Null
+foreach ($f in Get-ChildItem $Dir -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue) {
+    & netsh advfirewall firewall add rule name="VideoEncoder FFmpeg" dir=in action=allow program="$($f.FullName)" enable=yes profile=any | Out-Null
+}
+Ok "ffmpeg poate primi multicast (UDP)"
 
 # ---------------------------------------------------------------- 6. alimentare (stream 24/7)
 Step "6. Alimentare (pentru stream 24/7)"

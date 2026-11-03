@@ -116,6 +116,9 @@ func OutputPath(input string, o *EncodeOptions) string {
 		dir = getCfg().OutputDir
 	}
 	base := strings.TrimSuffix(filepath.Base(input), filepath.Ext(input))
+	if IsURL(input) {
+		base = urlBaseName(input)
+	}
 	ext := containerExt(o.Container)
 	name := base + o.Suffix
 	out := filepath.Join(dir, name+"."+ext)
@@ -399,7 +402,7 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		}
 	}
 	a = append(a, splitArgs(o.InArgs)...)
-	a = append(a, "-i", input)
+	a = append(a, "-i", UDPInput(input))
 	if hasEnd && end > start {
 		a = append(a, "-t", fmtSec(end-start))
 	}
@@ -726,4 +729,71 @@ func scaleFlags(codec string) string {
 		return "bilinear"
 	}
 	return "lanczos"
+}
+
+// UDPInput completează URL-urile udp:// / rtp:// (multicast) cu opțiunile necesare:
+// interfața de rețea (localaddr), buffer mare și timeout (ca stream-ul să repornească dacă sursa cade)
+func UDPInput(in string) string {
+	l := strings.ToLower(in)
+	if !strings.HasPrefix(l, "udp://") && !strings.HasPrefix(l, "rtp://") {
+		return in
+	}
+	in = strings.Replace(in, "://@", "://", 1) // stil VLC: udp://@239.1.1.1:1234
+	base, q, _ := strings.Cut(in, "?")
+	opts := map[string]bool{}
+	for _, kv := range strings.Split(q, "&") {
+		if k, _, _ := strings.Cut(kv, "="); k != "" {
+			opts[strings.ToLower(k)] = true
+		}
+	}
+	var add []string
+	if ip := getCfg().McastIface; ip != "" && !opts["localaddr"] {
+		add = append(add, "localaddr="+ip)
+	}
+	if !opts["fifo_size"] {
+		add = append(add, "fifo_size=1000000")
+	}
+	if !opts["overrun_nonfatal"] {
+		add = append(add, "overrun_nonfatal=1")
+	}
+	if !opts["buffer_size"] {
+		add = append(add, "buffer_size=8388608")
+	}
+	if !opts["timeout"] {
+		add = append(add, "timeout=10000000") // 10 s fără date -> eroare -> repornire automată
+	}
+	if len(add) == 0 {
+		return in
+	}
+	if q != "" {
+		return base + "?" + q + "&" + strings.Join(add, "&")
+	}
+	return base + "?" + strings.Join(add, "&")
+}
+
+// urlBaseName: "udp://@239.1.1.1:1234?x" -> "udp_239.1.1.1_1234", "http://h:8000/play/M9TV" -> "M9TV"
+func urlBaseName(u string) string {
+	scheme, rest, _ := strings.Cut(u, "://")
+	rest, _, _ = strings.Cut(rest, "?")
+	rest = strings.TrimPrefix(rest, "@")
+	if i := strings.LastIndex(rest, "/"); i >= 0 && i < len(rest)-1 {
+		rest = rest[i+1:] // ultimul segment din cale (numele canalului)
+		if ext := filepath.Ext(rest); len(ext) >= 2 && len(ext) <= 6 && strings.ContainsAny(strings.ToLower(ext), "abcdefghijklmnopqrstuvwxyz") && !strings.Contains(ext, ":") {
+			rest = strings.TrimSuffix(rest, ext) // .ts, .m3u8, .mp4…
+		}
+	} else {
+		rest = scheme + "_" + strings.TrimSuffix(rest, "/")
+	}
+	var b strings.Builder
+	for _, r := range rest {
+		if r == '.' || r == '-' || r == '_' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "stream"
+	}
+	return b.String()
 }

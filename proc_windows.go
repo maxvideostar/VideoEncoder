@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -88,4 +89,22 @@ func revealFile(p string) {
 	cmd := exec.Command("explorer.exe")
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `explorer.exe /select,"` + p + `"`}
 	cmd.Start()
+}
+
+// ensureFFmpegFirewall permite traficul de intrare (UDP multicast, RTP, SRT) pentru ffmpeg.exe.
+// Funcționează când rulăm ca serviciu / administrator; altfel netsh eșuează silențios.
+func ensureFFmpegFirewall(ff string) {
+	if !filepath.IsAbs(ff) {
+		return
+	}
+	run := func(args ...string) error {
+		c := exec.Command("netsh", args...)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+		return c.Run()
+	}
+	run("advfirewall", "firewall", "delete", "rule", "name=VideoEncoder FFmpeg")
+	if err := run("advfirewall", "firewall", "add", "rule", "name=VideoEncoder FFmpeg", "dir=in", "action=allow",
+		"program="+ff, "enable=yes", "profile=any"); err == nil {
+		log.Printf("firewall: trafic de intrare permis pentru %s", ff)
+	}
 }

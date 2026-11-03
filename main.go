@@ -20,7 +20,7 @@ import (
 )
 
 const AppName = "VideoEncoder"
-const AppVersion = "1.4.0"
+const AppVersion = "1.4.1"
 
 //go:embed web
 var webFS embed.FS
@@ -40,6 +40,7 @@ type Config struct {
 	OpenWindow  bool   `json:"open_window"`
 	DefaultPass bool   `json:"default_pass"`
 	QSVModeOK   string `json:"qsv_mode_ok"` // mod QSV detectat ca funcțional
+	McastIface  string `json:"mcast_iface"` // IP-ul plăcii de rețea pe care vine multicastul (gol = automat)
 }
 
 var (

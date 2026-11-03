@@ -38,7 +38,7 @@
         <input type="file" id="fileInput" multiple hidden>
       </div>
       <div class="rowflex">
-        <input id="manualPath" placeholder="Cale fișier sau URL (http, rtmp, udp…)">
+        <input id="manualPath" placeholder="Cale fișier sau URL (http, rtmp, udp://239.x.x.x:1234…)">
         <button class="btn" id="addManual">Adaugă</button>
       </div>
       <div class="drop" id="drop" style="margin-top:10px">Trage fișierele aici pentru a le încărca pe server</div>
@@ -300,6 +300,10 @@
       <label class="full">Folder ieșire implicit<div class="rowflex"><input name="output_dir"><button class="btn" id="pickOut2">📁</button></div></label>
       <label class="full">Cale ffmpeg.exe (gol = automat)<input name="ffmpeg_path"></label>
       <label class="full">Cale ffprobe.exe (gol = automat)<input name="ffprobe_path"></label>
+      <label class="full">Placa de rețea pentru multicast (udp://239.x.x.x)
+        <select name="mcast_iface" id="mcastIface"><option value="">Automat (placa implicită)</option></select>
+        <span class="hint">Alege placa pe care vine multicastul (ca interfața din udpxy). Necesar când PC-ul are mai multe plăci de rețea.</span>
+      </label>
       <label class="full">Mod Intel QSV detectat ca funcțional
         <select name="qsv_mode_ok"><option value="">Nedetectat (se testează la primul job)</option><option value="d3d11">D3D11</option><option value="dxva2">DXVA2</option><option value="hybrid">Hibrid</option><option value="cpudec">Doar encodare QSV</option></select>
       </label>
