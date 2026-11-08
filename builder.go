@@ -567,6 +567,10 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		if strings.TrimSpace(o.VFilter) != "" {
 			vf = append(vf, strings.TrimSpace(o.VFilter))
 		}
+		if strings.HasSuffix(vc, "_amf") {
+			// AMD AMF: dacă sursa / decodarea D3D11 vine în gamă „full”, o aducem în gama TV (16-235)
+			vf = append(vf, "scale=out_range=tv")
+		}
 		if len(vf) > 0 {
 			a = append(a, "-vf", strings.Join(vf, ","))
 		}
@@ -575,6 +579,14 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		}
 		if pf := hwPixFmt(vc, o.PixFmt); pf != "" {
 			a = append(a, "-pix_fmt", pf)
+		}
+		// AMD AMF (mai ales VCE 1-3, ex. Futro S930) marchează streamul ca „full range”:
+		// playerul nu mai întinde 16-235 → negru gri, imagine spălăcită. Forțăm marcajul TV range.
+		switch vc {
+		case "h264_amf":
+			a = append(a, "-color_range", "tv", "-bsf:v", "h264_metadata=video_full_range_flag=0")
+		case "hevc_amf":
+			a = append(a, "-color_range", "tv", "-bsf:v", "hevc_metadata=video_full_range_flag=0")
 		}
 		if o.GOP > 0 {
 			a = append(a, "-g", strconv.Itoa(o.GOP))
