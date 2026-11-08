@@ -571,10 +571,6 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		if strings.TrimSpace(o.VFilter) != "" {
 			vf = append(vf, strings.TrimSpace(o.VFilter))
 		}
-		if strings.HasSuffix(vc, "_amf") {
-			// AMD AMF: dacă sursa / decodarea D3D11 vine în gamă „full”, o aducem în gama TV (16-235)
-			vf = append(vf, "scale=out_range=tv")
-		}
 		if len(vf) > 0 {
 			a = append(a, "-vf", strings.Join(vf, ","))
 		}
