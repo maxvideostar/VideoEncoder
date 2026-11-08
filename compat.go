@@ -28,7 +28,12 @@ import (
 // (până la schimbarea FFmpeg-ului sau a driverului).
 
 const compatVer = "5.1.2"
-const compatURL = "https://github.com/GyanD/codexffmpeg/releases/download/5.1.2/ffmpeg-5.1.2-essentials_build.zip"
+
+// surse în ordine: site-ul autorului (gyan.dev), apoi oglinda GitHub (dă uneori 504)
+var compatURLs = []string{
+	"https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-5.1.2-essentials_build.zip",
+	"https://github.com/GyanD/codexffmpeg/releases/download/5.1.2/ffmpeg-5.1.2-essentials_build.zip",
+}
 
 var compatMu sync.Mutex
 
@@ -116,12 +121,15 @@ func maybeCompatFFmpeg() {
 
 	if !fileExists(compatExe) {
 		var err error
-		for i := 1; i <= 5; i++ { // GitHub dă uneori 502/504 la descărcări
-			if err = fetchFFmpegZip(compatURL, dir); err == nil {
-				break
+	try:
+		for i := 1; i <= 3; i++ {
+			for _, u := range compatURLs {
+				if err = fetchFFmpegZip(u, dir); err == nil {
+					break try
+				}
+				log.Printf("FFmpeg %s: %s – %v", compatVer, u, err)
 			}
-			log.Printf("FFmpeg %s: încercarea %d eșuată (%v)", compatVer, i, err)
-			time.Sleep(time.Duration(i*10) * time.Second)
+			time.Sleep(time.Duration(i*15) * time.Second)
 		}
 		if err != nil {
 			log.Printf("FFmpeg %s: descărcare eșuată: %v", compatVer, err)
