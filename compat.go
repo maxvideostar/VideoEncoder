@@ -115,7 +115,15 @@ func maybeCompatFFmpeg() {
 		strings.Join(gpus, "; "), strings.TrimPrefix(ver, "ffmpeg version "), compatVer)
 
 	if !fileExists(compatExe) {
-		if err := fetchFFmpegZip(compatURL, dir); err != nil {
+		var err error
+		for i := 1; i <= 5; i++ { // GitHub dă uneori 502/504 la descărcări
+			if err = fetchFFmpegZip(compatURL, dir); err == nil {
+				break
+			}
+			log.Printf("FFmpeg %s: încercarea %d eșuată (%v)", compatVer, i, err)
+			time.Sleep(time.Duration(i*10) * time.Second)
+		}
+		if err != nil {
 			log.Printf("FFmpeg %s: descărcare eșuată: %v", compatVer, err)
 			return
 		}
