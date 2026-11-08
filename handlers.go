@@ -166,6 +166,7 @@ func testHW() {
 	}
 	sort.Strings(ok)
 	log.Printf("Encodere hardware funcționale: %v", ok)
+	go maybeCompatFFmpeg() // plăci video vechi: încearcă automat FFmpeg 5.1.2
 }
 
 // ================= Sistem / setări =================
