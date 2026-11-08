@@ -204,6 +204,29 @@ func (m *JobManager) run(j *Job) {
 		os.MkdirAll(filepath.Dir(j.Output), 0755)
 	}
 
+	// stream-urile live: comanda se reconstruiește la fiecare pornire, ca să folosească
+	// versiunea curentă a aplicației și encoderele detectate acum (nu comanda salvată
+	// la crearea jobului – altfel o actualizare nu se aplica joburilor existente)
+	if j.Stream && o != nil {
+		if isHWEnc(o.VCodec) {
+			for i := 0; i < 60; i++ { // așteaptă testul encoderelor HW după pornirea aplicației
+				encMu.Lock()
+				done := hwTested
+				encMu.Unlock()
+				if done {
+					break
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+		}
+		oo := *o
+		oo.Overwrite = true
+		na := BuildArgs(j.Input, j.Output, &oo)
+		m.mu.Lock()
+		j.Args = na
+		j.Cmd = CommandString(exe, na)
+		m.mu.Unlock()
+	}
 	args := append([]string{}, j.Args...)
 	// inserăm -progress înainte de ieșire
 	args = append(args[:len(args)-1], "-progress", "pipe:1", "-nostats", args[len(args)-1])
