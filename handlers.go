@@ -106,6 +106,7 @@ var (
 	encList    = map[string]bool{} // encoder prezent în build
 	hwWorks    = map[string]bool{} // encoder HW testat funcțional
 	hwTested   bool
+	amfHighBF  bool // h264_amf acceptă profil High + B-frames
 	ffVersion  string
 	hwEncoders = []string{"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_qsv", "hevc_qsv", "av1_qsv", "h264_amf", "hevc_amf", "av1_amf"}
 )
@@ -154,9 +155,17 @@ func testHW() {
 			"color=c=black:s=640x360:r=25:d=0.4", "-pix_fmt", "yuv420p", "-c:v", e, "-f", "null", "-")
 		res[e] = err == nil
 	}
+	// AMD: High + B-frames (VCE 2.0+, ex. Futro S930) – structură ca la x264, mult mai multă calitate la bitrate mic
+	amfHB := false
+	if res["h264_amf"] {
+		_, err := runQuiet(20*time.Second, exe, "-hide_banner", "-v", "error", "-f", "lavfi", "-i",
+			"testsrc2=s=640x360:r=25:d=1", "-pix_fmt", "nv12", "-c:v", "h264_amf", "-profile:v", "high", "-bf", "2", "-f", "null", "-")
+		amfHB = err == nil
+	}
 	encMu.Lock()
 	hwWorks = res
 	hwTested = true
+	amfHighBF = amfHB
 	encMu.Unlock()
 	var ok []string
 	for k, v := range res {

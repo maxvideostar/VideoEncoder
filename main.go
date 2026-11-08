@@ -20,7 +20,7 @@ import (
 )
 
 const AppName = "VideoEncoder"
-const AppVersion = "1.4.9"
+const AppVersion = "1.5.0"
 
 //go:embed web
 var webFS embed.FS

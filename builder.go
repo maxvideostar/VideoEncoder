@@ -588,6 +588,12 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		// playerul nu mai întinde 16-235 → negru gri, imagine spălăcită. Forțăm marcajul TV range.
 		switch vc {
 		case "h264_amf":
+			encMu.Lock()
+			hb := amfHighBF
+			encMu.Unlock()
+			if hb {
+				a = append(a, "-profile:v", "high", "-bf", "2")
+			}
 			a = append(a, "-color_range", "tv", "-bsf:v", "h264_metadata=video_full_range_flag=0")
 		case "hevc_amf":
 			a = append(a, "-color_range", "tv", "-bsf:v", "hevc_metadata=video_full_range_flag=0")
