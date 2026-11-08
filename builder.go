@@ -210,12 +210,16 @@ func rateControl(codec string, o *EncodeOptions) []string {
 		case strings.HasSuffix(codec, "_nvenc"):
 			a = append([]string{"-rc", "vbr"}, a...)
 		case strings.HasSuffix(codec, "_amf"):
-			a = append([]string{"-rc", "vbr_peak"}, a...)
+			// CBR: cu vbr_peak, AMF (mai ales VCE 1-3) folosea doar ~1/3 din bitrate
+			// (ex. 375k din 1000k) -> imagine fără detaliu. CBR folosește tot bitrate-ul setat.
+			mr := o.MaxRate
+			if mr == "" {
+				mr = o.VBitrate
+			}
+			return []string{"-rc", "cbr", "-b:v", o.VBitrate, "-maxrate", mr, "-bufsize", o.VBitrate}
 		}
 		if o.MaxRate != "" {
 			a = append(a, "-maxrate", o.MaxRate, "-bufsize", doubleRate(o.MaxRate))
-		} else if strings.HasSuffix(codec, "_amf") {
-			a = append(a, "-maxrate", o.VBitrate)
 		}
 		return a
 	}
