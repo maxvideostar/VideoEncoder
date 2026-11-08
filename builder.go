@@ -584,19 +584,17 @@ func BuildArgs(input, output string, o *EncodeOptions) []string {
 		if pf := hwPixFmt(vc, o.PixFmt); pf != "" {
 			a = append(a, "-pix_fmt", pf)
 		}
-		// AMD AMF (mai ales VCE 1-3, ex. Futro S930) marchează streamul ca „full range”:
-		// playerul nu mai întinde 16-235 → negru gri, imagine spălăcită. Forțăm marcajul TV range.
-		switch vc {
-		case "h264_amf":
+		// AMD AMF: marcăm gama TV direct în encoder (AMF_VIDEO_ENCODER_FULL_RANGE_COLOR=false).
+		// NU folosim h264_metadata și nici High + B-frames implicit: pe VCE 2.0 (Futro S930)
+		// combinația dădea imagine verde (fără crominanță) în stream real.
+		if strings.HasSuffix(vc, "_amf") {
+			a = append(a, "-color_range", "tv")
 			encMu.Lock()
-			hb := amfHighBF
+			hb := amfHighBF && getCfg().AMFHighBF
 			encMu.Unlock()
-			if hb {
+			if hb && vc == "h264_amf" {
 				a = append(a, "-profile:v", "high", "-bf", "2")
 			}
-			a = append(a, "-color_range", "tv", "-bsf:v", "h264_metadata=video_full_range_flag=0")
-		case "hevc_amf":
-			a = append(a, "-color_range", "tv", "-bsf:v", "hevc_metadata=video_full_range_flag=0")
 		}
 		if o.GOP > 0 {
 			a = append(a, "-g", strconv.Itoa(o.GOP))

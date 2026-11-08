@@ -20,13 +20,14 @@ import (
 )
 
 const AppName = "VideoEncoder"
-const AppVersion = "1.5.1"
+const AppVersion = "1.5.2"
 
 //go:embed web
 var webFS embed.FS
 
 type Config struct {
 	Port        int    `json:"port"`
+	AMFHighBF   bool   `json:"amf_high_bf"` // experimental: AMD High + B-frames (oprit implicit)
 	Bind        string `json:"bind"`
 	Username    string `json:"username"`
 	PassHash    string `json:"pass_hash"`
