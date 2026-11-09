@@ -47,40 +47,71 @@ type Job struct {
 }
 
 type JobManager struct {
-	mu      sync.Mutex
-	jobs    map[string]*Job
-	order   []string
-	paused  bool
-	wake    chan struct{}
-	seq     int
-	saveTmr *time.Timer
+	mu       sync.Mutex
+	jobs     map[string]*Job
+	order    []string
+	paused   bool
+	wake     chan struct{}
+	seq      int
+	saveTmr  *time.Timer
+	stopping bool // aplicația se oprește: nu mai schimbăm starea joburilor
 }
 
 func jobsFile() string { return filepath.Join(baseDir, "jobs.json") }
 
+// loadJobsList citește jobs.json; dacă e gol/corupt (ex. PC oprit în timpul scrierii)
+// folosește copia de siguranță jobs.json.bak
+func loadJobsList() ([]*Job, string) {
+	for _, f := range []string{jobsFile(), jobsFile() + ".bak", jobsFile() + ".tmp"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		var list []*Job
+		if len(strings.Trim(string(b), "\x00 \r\n\t")) == 0 {
+			log.Printf("%s este gol – încerc copia de siguranță", filepath.Base(f))
+			continue
+		}
+		if err := json.Unmarshal(b, &list); err != nil {
+			log.Printf("%s corupt (%v) – încerc copia de siguranță", filepath.Base(f), err)
+			os.WriteFile(f+".corrupt", b, 0644)
+			continue
+		}
+		return list, f
+	}
+	return nil, ""
+}
+
 func NewJobManager() *JobManager {
 	m := &JobManager{jobs: map[string]*Job{}, wake: make(chan struct{}, 1)}
-	if b, err := os.ReadFile(jobsFile()); err == nil {
-		var list []*Job
-		if json.Unmarshal(b, &list) == nil {
-			for _, j := range list {
-				resume := j.Stream && j.Options != nil && j.Options.AutoRestart &&
-					(j.Status == "running" || j.Status == "paused" || j.Status == "queued" ||
-						(j.Status == "error" && strings.HasPrefix(j.Error, "repornire automată")))
-				if resume {
-					// stream-urile live repornesc singure după restart (aplicație / serviciu / PC)
-					j.Status, j.Error, j.Progress, j.OutTime, j.Size, j.ETA = "queued", "", 0, 0, 0, 0
-					j.Finished = nil
-					j.Restarts++
-					log.Printf("stream %s -> %s: repornesc după restart", filepath.Base(j.Input), j.Output)
-				} else if j.Status == "running" || j.Status == "paused" {
-					j.Status = "error"
-					j.Error = "întrerupt (aplicația a fost repornită)"
-				}
-				m.jobs[j.ID] = j
-				m.order = append(m.order, j.ID)
-			}
+	list, src := loadJobsList()
+	if src != "" {
+		log.Printf("joburi încărcate din %s: %d", filepath.Base(src), len(list))
+	}
+	for _, j := range list {
+		if j == nil || j.ID == "" {
+			continue
 		}
+		resume := j.Stream && j.Options != nil && j.Options.AutoRestart &&
+			(j.Status == "running" || j.Status == "paused" || j.Status == "queued" ||
+				(j.Status == "error" && strings.HasPrefix(j.Error, "repornire automată")))
+		if resume {
+			// stream-urile live repornesc singure după restart (aplicație / serviciu / PC)
+			j.Status, j.Error, j.Progress, j.OutTime, j.Size, j.ETA = "queued", "", 0, 0, 0, 0
+			j.Finished = nil
+			j.PID = 0
+			j.Restarts++
+			log.Printf("stream %s -> %s: repornesc după restart", filepath.Base(j.Input), j.Output)
+		} else if j.Status == "running" || j.Status == "paused" {
+			j.Status = "error"
+			j.Error = "întrerupt (aplicația a fost repornită)"
+			j.PID = 0
+		}
+		m.jobs[j.ID] = j
+		m.order = append(m.order, j.ID)
+	}
+	if len(list) > 0 {
+		m.saveNow() // rescrie fișierul curat (și refă copia de siguranță)
 	}
 	go m.loop()
 	return m
@@ -107,6 +138,9 @@ func (m *JobManager) loop() {
 func (m *JobManager) schedule() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.stopping {
+		return
+	}
 	// stream-urile pornesc imediat, nu ocupă locuri în coadă
 	for _, id := range m.order {
 		j := m.jobs[id]
@@ -356,6 +390,13 @@ func qsvPipelineError(j *Job) bool {
 
 func (m *JobManager) finish(j *Job, err error) {
 	m.mu.Lock()
+	if m.stopping {
+		// oprire aplicație/serviciu/Windows: lăsăm starea „running” ca să repornească la pornire
+		j.cmd = nil
+		j.PID = 0
+		m.mu.Unlock()
+		return
+	}
 	// rezervă automată QSV: d3d11 -> dxva2 -> hibrid
 	if err != nil && !j.canceled && (j.QSVAuto || j.Options.QSVMode == "" || j.Options.QSVMode == "auto") && qsvPipelineError(j) {
 		cur := effectiveQSVMode(j.Options)
@@ -611,34 +652,84 @@ func (m *JobManager) SetPaused(p bool) {
 func (m *JobManager) saveSoon() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.saveTmr != nil {
+	if m.saveTmr != nil || m.stopping {
 		return
 	}
 	m.saveTmr = time.AfterFunc(time.Second, func() {
 		m.mu.Lock()
 		m.saveTmr = nil
-		list := make([]Job, 0, len(m.order))
-		for _, id := range m.order {
-			c := *m.jobs[id]
-			c.cmd = nil
-			if len(c.Log) > 60 {
-				c.Log = c.Log[len(c.Log)-60:]
-			}
-			list = append(list, c)
-		}
 		m.mu.Unlock()
-		b, _ := json.MarshalIndent(list, "", " ")
-		tmp := jobsFile() + ".tmp"
-		if os.WriteFile(tmp, b, 0644) == nil {
-			os.Rename(tmp, jobsFile())
-		}
+		m.saveNow()
 	})
+}
+
+var saveMu sync.Mutex
+
+// saveNow scrie jobs.json sigur: .tmp + fsync, copia veche -> .bak, apoi rename
+func (m *JobManager) saveNow() {
+	m.mu.Lock()
+	list := make([]Job, 0, len(m.order))
+	for _, id := range m.order {
+		jj := m.jobs[id]
+		if jj == nil {
+			continue
+		}
+		c := *jj
+		c.cmd = nil
+		if len(c.Log) > 60 {
+			c.Log = c.Log[len(c.Log)-60:]
+		}
+		list = append(list, c)
+	}
+	m.mu.Unlock()
+	b, err := json.MarshalIndent(list, "", " ")
+	if err != nil {
+		log.Printf("nu pot serializa joburile: %v", err)
+		return
+	}
+	saveMu.Lock()
+	defer saveMu.Unlock()
+	f := jobsFile()
+	tmp := f + ".tmp"
+	fh, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("nu pot salva joburile: %v", err)
+		return
+	}
+	_, werr := fh.Write(b)
+	serr := fh.Sync()
+	cerr := fh.Close()
+	if werr != nil || serr != nil || cerr != nil {
+		log.Printf("nu pot salva joburile: %v %v %v", werr, serr, cerr)
+		return
+	}
+	// păstrăm ultima versiune bună ca .bak (doar dacă nu e goală)
+	if st, e := os.Stat(f); e == nil && st.Size() > 2 {
+		os.Remove(f + ".bak")
+		os.Rename(f, f+".bak")
+	}
+	if err := os.Rename(tmp, f); err != nil {
+		log.Printf("nu pot redenumi %s: %v", filepath.Base(tmp), err)
+	}
 }
 
 // KillAll oprește toate procesele ffmpeg (la oprirea serviciului / aplicației)
 func (m *JobManager) KillAll() {
 	m.mu.Lock()
+	if m.stopping {
+		m.mu.Unlock()
+		return
+	}
+	m.stopping = true
 	m.paused = true
+	if m.saveTmr != nil {
+		m.saveTmr.Stop()
+		m.saveTmr = nil
+	}
+	m.mu.Unlock()
+	// salvăm ÎNAINTE de a opri ffmpeg, cu starea reală (running) – la pornire se reiau
+	m.saveNow()
+	m.mu.Lock()
 	for _, j := range m.jobs {
 		if (j.Status == "running" || j.Status == "paused") && j.cmd != nil && j.cmd.Process != nil {
 			if j.Status == "paused" {
