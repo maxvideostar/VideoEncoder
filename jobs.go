@@ -436,6 +436,9 @@ func (m *JobManager) finish(j *Job, err error) {
 			if strings.HasPrefix(l, "> ") {
 				break
 			}
+			if isStatsLine(l) {
+				continue
+			}
 			for _, k := range []string{"error", "failed", "refused", "broken pipe", "invalid", "not found", "denied", "timed out", "unable", "cannot", "no such", "unknown"} {
 				if strings.Contains(l, k) && !strings.HasPrefix(l, "conversion failed") {
 					msg = j.Log[i]
@@ -446,7 +449,7 @@ func (m *JobManager) finish(j *Job, err error) {
 		}
 		for i := len(j.Log) - 1; i >= 0 && !found; i-- {
 			l := j.Log[i]
-			if !strings.HasPrefix(l, "> ") && strings.TrimSpace(l) != "" && !strings.HasPrefix(l, "Exiting") && !strings.HasPrefix(l, "Conversion failed") {
+			if !strings.HasPrefix(l, "> ") && strings.TrimSpace(l) != "" && !strings.HasPrefix(l, "Exiting") && !strings.HasPrefix(l, "Conversion failed") && !isStatsLine(strings.ToLower(l)) {
 				msg = l
 				break
 			}
@@ -758,4 +761,14 @@ func rememberQSVMode(j *Job) {
 		log.Printf("Intel QSV: modul %s funcționează – salvat pentru joburile următoare", mode)
 	}
 	cfgMu.Unlock()
+}
+
+// isStatsLine – liniile de statistici de la finalul ffmpeg (nu descriu eroarea)
+func isStatsLine(l string) bool {
+	for _, k := range []string{"muxing overhead", "video:", "frame=", "size=", "[q] command received", "kb/s:"} {
+		if strings.Contains(l, k) {
+			return true
+		}
+	}
+	return false
 }
